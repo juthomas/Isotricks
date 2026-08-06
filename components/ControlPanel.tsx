@@ -1,0 +1,298 @@
+"use client";
+
+import DemoPicker from "./DemoPicker";
+import FileUpload from "./FileUpload";
+import type {
+  DemoId,
+  DisplayMode,
+  ModelSettings,
+  ObjectSource,
+  RotationDirection,
+} from "@/lib/types";
+
+type ControlPanelProps = {
+  source: ObjectSource;
+  settings: ModelSettings;
+  panelOpen: boolean;
+  onTogglePanel: () => void;
+  onSelectDemo: (id: DemoId) => void;
+  onFile: (file: File) => void;
+  onSettingsChange: (update: Partial<ModelSettings>) => void;
+  onResetSettings: () => void;
+};
+
+function SliderRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  display,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  display?: string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="block space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-zinc-400">{label}</span>
+        <span className="font-mono text-zinc-300">{display ?? value.toFixed(2)}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 accent-indigo-500"
+      />
+    </label>
+  );
+}
+
+const MODES: { id: DisplayMode; label: string }[] = [
+  { id: "wireframe", label: "Wireframe" },
+  { id: "points", label: "Points" },
+  { id: "solid", label: "Solid" },
+];
+
+const DIRECTIONS: { id: RotationDirection; label: string }[] = [
+  { id: 1, label: "CW" },
+  { id: -1, label: "CCW" },
+  { id: 0, label: "Pause" },
+];
+
+export default function ControlPanel({
+  source,
+  settings,
+  panelOpen,
+  onTogglePanel,
+  onSelectDemo,
+  onFile,
+  onSettingsChange,
+  onResetSettings,
+}: ControlPanelProps) {
+  const activeDemoId = source.kind === "demo" ? source.id : null;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onTogglePanel}
+        className="absolute right-3 top-3 z-20 rounded-lg bg-[#12121a]/95 px-3 py-2 text-sm text-zinc-200 ring-1 ring-zinc-700 backdrop-blur md:hidden"
+      >
+        {panelOpen ? "Hide controls" : "Controls"}
+      </button>
+
+      <aside
+        className={`absolute right-0 top-0 z-10 flex h-full w-full max-w-sm flex-col border-l border-zinc-800/80 bg-[#12121a]/95 text-zinc-200 shadow-2xl backdrop-blur-md transition-transform duration-200 ${
+          panelOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
+        }`}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-zinc-800/80 px-4 py-4">
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight text-zinc-50">
+              Iso Tricks
+            </h1>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              Optical illusions in isometric view
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onTogglePanel}
+            className="rounded-md px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 md:hidden"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4">
+          <div className="rounded-lg bg-zinc-900/60 px-3 py-2 ring-1 ring-zinc-800">
+            <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+              Current object
+            </p>
+            <p className="mt-0.5 truncate text-sm font-medium text-zinc-100">
+              {source.label}
+            </p>
+            <p className="mt-1 text-[10px] text-zinc-600">
+              Settings saved locally for this object
+            </p>
+          </div>
+
+          <DemoPicker activeId={activeDemoId} onSelect={onSelectDemo} />
+          <FileUpload onFile={onFile} />
+
+          <div className="space-y-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Display mode
+            </h2>
+            <div className="flex gap-1 rounded-lg bg-zinc-900 p-1 ring-1 ring-zinc-800">
+              {MODES.map((mode) => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => onSettingsChange({ displayMode: mode.id })}
+                  className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                    settings.displayMode === mode.id
+                      ? "bg-indigo-600 text-white"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Rotation
+            </h2>
+            <label className="flex items-center justify-between text-xs text-zinc-400">
+              <span>Auto-rotate</span>
+              <input
+                type="checkbox"
+                checked={settings.autoRotate}
+                onChange={(e) =>
+                  onSettingsChange({ autoRotate: e.target.checked })
+                }
+                className="size-4 accent-indigo-500"
+              />
+            </label>
+            <div className="flex gap-1 rounded-lg bg-zinc-900 p-1 ring-1 ring-zinc-800">
+              {DIRECTIONS.map((dir) => (
+                <button
+                  key={dir.id}
+                  type="button"
+                  onClick={() =>
+                    onSettingsChange({
+                      rotationDirection: dir.id,
+                      autoRotate: dir.id === 0 ? false : true,
+                    })
+                  }
+                  className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                    settings.rotationDirection === dir.id
+                      ? "bg-indigo-600 text-white"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  {dir.label}
+                </button>
+              ))}
+            </div>
+            <SliderRow
+              label="Speed (rad/s)"
+              value={settings.rotationSpeed}
+              min={0}
+              max={2}
+              step={0.01}
+              onChange={(rotationSpeed) => onSettingsChange({ rotationSpeed })}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Isometric view
+            </h2>
+            <SliderRow
+              label="Angle X (elevation °)"
+              value={settings.angleX}
+              min={-89}
+              max={89}
+              step={0.1}
+              display={`${settings.angleX.toFixed(1)}°`}
+              onChange={(angleX) => onSettingsChange({ angleX })}
+            />
+            <SliderRow
+              label="Angle Y (azimuth °)"
+              value={settings.angleY}
+              min={-180}
+              max={180}
+              step={0.1}
+              display={`${settings.angleY.toFixed(1)}°`}
+              onChange={(angleY) => onSettingsChange({ angleY })}
+            />
+            <SliderRow
+              label="Zoom"
+              value={settings.zoom}
+              min={0.2}
+              max={4}
+              step={0.01}
+              onChange={(zoom) => onSettingsChange({ zoom })}
+            />
+          </div>
+
+          {settings.displayMode === "points" && (
+            <div className="space-y-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                Points
+              </h2>
+              <SliderRow
+                label="Point size"
+                value={settings.pointSize}
+                min={0.5}
+                max={10}
+                step={0.1}
+                onChange={(pointSize) => onSettingsChange({ pointSize })}
+              />
+            </div>
+          )}
+
+          {settings.displayMode === "wireframe" && (
+            <div className="space-y-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                Wireframe
+              </h2>
+              <SliderRow
+                label="Line width (hint)"
+                value={settings.lineWidth}
+                min={0.5}
+                max={3}
+                step={0.1}
+                onChange={(lineWidth) => onSettingsChange({ lineWidth })}
+              />
+              <p className="text-[10px] text-zinc-600">
+                Line width is limited by WebGL on most browsers.
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Camera
+            </h2>
+            <label className="flex items-center justify-between text-xs text-zinc-400">
+              <span>Orbit drag</span>
+              <input
+                type="checkbox"
+                checked={settings.orbitEnabled}
+                onChange={(e) =>
+                  onSettingsChange({ orbitEnabled: e.target.checked })
+                }
+                className="size-4 accent-indigo-500"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="border-t border-zinc-800/80 p-4">
+          <button
+            type="button"
+            onClick={onResetSettings}
+            className="w-full rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-200 ring-1 ring-zinc-700 transition-colors hover:bg-zinc-700"
+          >
+            Reset to defaults
+          </button>
+        </div>
+      </aside>
+    </>
+  );
+}
