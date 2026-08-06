@@ -145,7 +145,7 @@ export default function IsoViewer({
   }, [object]);
 
   return (
-    <div className="relative h-full w-full bg-[#0a0a0f]">
+    <div className="relative h-full w-full bg-black">
       <div
         className="h-full w-full"
         style={{
@@ -157,7 +157,7 @@ export default function IsoViewer({
           dpr={[1, 2]}
           gl={{ antialias: true, alpha: false }}
           onCreated={({ gl }) => {
-            gl.setClearColor("#0a0a0f", 1);
+            gl.setClearColor("#000000", 1);
           }}
         >
           <ambientLight
@@ -187,7 +187,7 @@ export default function IsoViewer({
       </div>
 
       {showLoading && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[#0a0a0f]/40">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40">
           <p className="text-sm text-zinc-500">Loading model…</p>
         </div>
       )}

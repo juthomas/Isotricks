@@ -12,7 +12,7 @@ import { DEFAULT_DEMO_ID, type DemoId, type ObjectSource } from "@/lib/types";
 const IsoViewer = dynamic(() => import("@/components/IsoViewer"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full w-full items-center justify-center bg-[#0a0a0f] text-sm text-zinc-500">
+    <div className="flex h-full w-full items-center justify-center bg-black text-sm text-zinc-500">
       Loading viewer…
     </div>
   ),
@@ -37,6 +37,27 @@ function getDesktopServerSnapshot() {
   return false;
 }
 
+function ExpandIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+      <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+      <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+      <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+
 export default function HomeClient() {
   const [source, setSource] = useState<ObjectSource>(defaultSource);
   const isDesktop = useSyncExternalStore(
@@ -48,6 +69,7 @@ export default function HomeClient() {
   const [panelOverride, setPanelOverride] = useState<boolean | null>(null);
   const panelOpen = panelOverride ?? isDesktop;
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [immersive, setImmersive] = useState(false);
 
   const objectKey = useMemo(() => {
     if (source.kind === "demo") return demoObjectKey(source.id);
@@ -62,6 +84,58 @@ export default function HomeClient() {
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
   }, [blobUrl]);
+
+  const exitImmersive = useCallback(() => {
+    setImmersive(false);
+    setPanelOverride(null);
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    }
+  }, []);
+
+  const enterImmersive = useCallback(() => {
+    setImmersive(true);
+    setPanelOverride(false);
+    const el = document.documentElement;
+    if (el.requestFullscreen) {
+      void el.requestFullscreen().catch(() => undefined);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!immersive) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      exitImmersive();
+    };
+
+    const onFullscreenChange = () => {
+      // Browser exit (Esc / gesture) also leaves immersive UI mode
+      if (!document.fullscreenElement) {
+        setImmersive(false);
+        setPanelOverride(null);
+      }
+    };
+
+    // Defer so the key/click that entered fullscreen doesn't immediately exit
+    const listenTimer = window.setTimeout(() => {
+      window.addEventListener("keydown", onKeyDown);
+    }, 0);
+
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => {
+      window.clearTimeout(listenTimer);
+      window.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+    };
+  }, [immersive, exitImmersive]);
+
+  const viewerSettings = useMemo(
+    () =>
+      immersive ? { ...settings, orbitEnabled: false } : settings,
+    [immersive, settings],
+  );
 
   const onSelectDemo = useCallback((id: DemoId) => {
     const demo = DEMO_LIST.find((d) => d.id === id);
@@ -116,22 +190,49 @@ export default function HomeClient() {
     return () => window.clearInterval(id);
   }, [settings.autoCycle, settings.autoCycleSeconds]);
 
+  const showPanel = panelOpen && !immersive;
+
   return (
-    <div className="relative h-dvh w-full overflow-hidden bg-[#0a0a0f]">
+    <div className="relative h-dvh w-full overflow-hidden bg-black">
       <div
         className={`h-full transition-[width] duration-200 ${
-          panelOpen ? "md:w-[calc(100%-24rem)]" : "w-full"
+          showPanel ? "md:w-[calc(100%-24rem)]" : "w-full"
         }`}
       >
         <IsoViewer
           object={loadState.object}
-          settings={settings}
+          settings={viewerSettings}
           loading={loadState.status === "loading"}
-          error={loadState.error}
+          error={immersive ? null : loadState.error}
         />
       </div>
 
-      {!panelOpen && (
+      {immersive && (
+        <button
+          type="button"
+          aria-label="Exit fullscreen"
+          className="absolute inset-0 z-30 cursor-default bg-transparent"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            exitImmersive();
+          }}
+        />
+      )}
+
+      {!immersive && (
+        <button
+          type="button"
+          onClick={enterImmersive}
+          aria-label="Enter fullscreen"
+          title="Fullscreen"
+          className="absolute left-3 top-3 z-20 flex size-11 items-center justify-center rounded-xl bg-[#12121a]/95 text-zinc-200 ring-1 ring-zinc-700 backdrop-blur transition-colors hover:bg-zinc-800 hover:text-white"
+        >
+          <ExpandIcon className="size-5" />
+        </button>
+      )}
+
+      {!immersive && !panelOpen && (
         <button
           type="button"
           onClick={() => setPanelOverride(true)}
@@ -141,16 +242,18 @@ export default function HomeClient() {
         </button>
       )}
 
-      <ControlPanel
-        source={source}
-        settings={settings}
-        panelOpen={panelOpen}
-        onTogglePanel={() => setPanelOverride(!panelOpen)}
-        onSelectDemo={onSelectDemo}
-        onFile={onFile}
-        onSettingsChange={(update) => setSettings(update)}
-        onResetSettings={resetSettings}
-      />
+      {!immersive && (
+        <ControlPanel
+          source={source}
+          settings={settings}
+          panelOpen={panelOpen}
+          onTogglePanel={() => setPanelOverride(!panelOpen)}
+          onSelectDemo={onSelectDemo}
+          onFile={onFile}
+          onSettingsChange={(update) => setSettings(update)}
+          onResetSettings={resetSettings}
+        />
+      )}
     </div>
   );
 }
