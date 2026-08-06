@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import ControlPanel from "@/components/ControlPanel";
 import { DEMO_LIST, getDemo } from "@/lib/demos";
 import { demoObjectKey, fileObjectKey } from "@/lib/storage";
@@ -58,6 +58,8 @@ function ExpandIcon({ className }: { className?: string }) {
   );
 }
 
+const IMMERSIVE_CURSOR_HIDE_MS = 2000;
+
 export default function HomeClient() {
   const [source, setSource] = useState<ObjectSource>(defaultSource);
   const isDesktop = useSyncExternalStore(
@@ -70,6 +72,8 @@ export default function HomeClient() {
   const panelOpen = panelOverride ?? isDesktop;
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [immersive, setImmersive] = useState(false);
+  const [cursorHidden, setCursorHidden] = useState(false);
+  const cursorHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const objectKey = useMemo(() => {
     if (source.kind === "demo") return demoObjectKey(source.id);
@@ -87,6 +91,7 @@ export default function HomeClient() {
 
   const exitImmersive = useCallback(() => {
     setImmersive(false);
+    setCursorHidden(false);
     setPanelOverride(null);
     if (document.fullscreenElement) {
       void document.exitFullscreen().catch(() => undefined);
@@ -95,6 +100,7 @@ export default function HomeClient() {
 
   const enterImmersive = useCallback(() => {
     setImmersive(true);
+    setCursorHidden(false);
     setPanelOverride(false);
     const el = document.documentElement;
     if (el.requestFullscreen) {
@@ -114,6 +120,7 @@ export default function HomeClient() {
       // Browser exit (Esc / gesture) also leaves immersive UI mode
       if (!document.fullscreenElement) {
         setImmersive(false);
+        setCursorHidden(false);
         setPanelOverride(null);
       }
     };
@@ -130,6 +137,29 @@ export default function HomeClient() {
       document.removeEventListener("fullscreenchange", onFullscreenChange);
     };
   }, [immersive, exitImmersive]);
+
+  // Hide cursor after inactivity in fullscreen
+  useEffect(() => {
+    if (!immersive) return;
+
+    const bumpCursor = () => {
+      setCursorHidden(false);
+      if (cursorHideTimer.current) clearTimeout(cursorHideTimer.current);
+      cursorHideTimer.current = setTimeout(() => {
+        setCursorHidden(true);
+      }, IMMERSIVE_CURSOR_HIDE_MS);
+    };
+
+    bumpCursor();
+    window.addEventListener("pointermove", bumpCursor);
+    return () => {
+      window.removeEventListener("pointermove", bumpCursor);
+      if (cursorHideTimer.current) {
+        clearTimeout(cursorHideTimer.current);
+        cursorHideTimer.current = null;
+      }
+    };
+  }, [immersive]);
 
   const viewerSettings = useMemo(
     () =>
@@ -193,7 +223,11 @@ export default function HomeClient() {
   const showPanel = panelOpen && !immersive;
 
   return (
-    <div className="relative h-dvh w-full overflow-hidden bg-black">
+    <div
+      className={`relative h-dvh w-full overflow-hidden bg-black ${
+        immersive && cursorHidden ? "cursor-none" : ""
+      }`}
+    >
       <div
         className={`h-full transition-[width] duration-200 ${
           showPanel ? "md:w-[calc(100%-24rem)]" : "w-full"
@@ -211,7 +245,9 @@ export default function HomeClient() {
         <button
           type="button"
           aria-label="Exit fullscreen"
-          className="absolute inset-0 z-30 cursor-default bg-transparent"
+          className={`absolute inset-0 z-30 bg-transparent ${
+            cursorHidden ? "cursor-none" : "cursor-default"
+          }`}
           onPointerDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
