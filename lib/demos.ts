@@ -1,8 +1,14 @@
 import * as THREE from "three";
 import type { DemoId } from "./types";
-import { TRIPODE_ASSET, TRIPODE_CASE_ASSET } from "./types";
+import { EXTERNAL_ASSETS, TRIPODE_ASSET, TRIPODE_CASE_ASSET } from "./types";
 
-export type DemoCategory = "models" | "solids" | "illusions" | "faces";
+export type DemoCategory =
+  | "models"
+  | "solids"
+  | "illusions"
+  | "faces"
+  | "music"
+  | "gadgets";
 
 export type DemoDefinition = {
   id: DemoId;
@@ -16,6 +22,8 @@ export type DemoDefinition = {
 
 export const DEMO_CATEGORIES: { id: DemoCategory; label: string }[] = [
   { id: "models", label: "Models" },
+  { id: "gadgets", label: "Gadgets" },
+  { id: "music", label: "Instruments" },
   { id: "faces", label: "Faces" },
   { id: "illusions", label: "Illusions" },
   { id: "solids", label: "Solids" },
@@ -37,6 +45,78 @@ export const DEMO_LIST: DemoDefinition[] = [
     category: "models",
     assetUrl: TRIPODE_CASE_ASSET.url,
     assetFileName: TRIPODE_CASE_ASSET.fileName,
+  },
+  {
+    id: "raspberry-pi",
+    label: "Raspberry Pi",
+    description: "Rough dimensional board",
+    category: "gadgets",
+    assetUrl: EXTERNAL_ASSETS["raspberry-pi"].url,
+    assetFileName: EXTERNAL_ASSETS["raspberry-pi"].fileName,
+  },
+  {
+    id: "arduino",
+    label: "Arduino",
+    description: "Uno-style microcontroller",
+    category: "gadgets",
+    assetUrl: EXTERNAL_ASSETS.arduino.url,
+    assetFileName: EXTERNAL_ASSETS.arduino.fileName,
+  },
+  {
+    id: "guitar",
+    label: "Guitar",
+    description: "Low-poly electric guitar",
+    category: "music",
+    assetUrl: EXTERNAL_ASSETS.guitar.url,
+    assetFileName: EXTERNAL_ASSETS.guitar.fileName,
+  },
+  {
+    id: "piano",
+    label: "Piano",
+    description: "Upright piano",
+    category: "music",
+    assetUrl: EXTERNAL_ASSETS.piano.url,
+    assetFileName: EXTERNAL_ASSETS.piano.fileName,
+  },
+  {
+    id: "drum",
+    label: "Drum Set",
+    description: "Full kit",
+    category: "music",
+    assetUrl: EXTERNAL_ASSETS.drum.url,
+    assetFileName: EXTERNAL_ASSETS.drum.fileName,
+  },
+  {
+    id: "trumpet",
+    label: "Trumpet",
+    description: "Brass instrument",
+    category: "music",
+    assetUrl: EXTERNAL_ASSETS.trumpet.url,
+    assetFileName: EXTERNAL_ASSETS.trumpet.fileName,
+  },
+  {
+    id: "violin",
+    label: "Violin",
+    description: "Bowed strings",
+    category: "music",
+    assetUrl: EXTERNAL_ASSETS.violin.url,
+    assetFileName: EXTERNAL_ASSETS.violin.fileName,
+  },
+  {
+    id: "saxophone",
+    label: "Saxophone",
+    description: "Woodwind",
+    category: "music",
+    assetUrl: EXTERNAL_ASSETS.saxophone.url,
+    assetFileName: EXTERNAL_ASSETS.saxophone.fileName,
+  },
+  {
+    id: "headphones",
+    label: "Headphones",
+    description: "Over-ear cans",
+    category: "music",
+    assetUrl: EXTERNAL_ASSETS.headphones.url,
+    assetFileName: EXTERNAL_ASSETS.headphones.fileName,
   },
   {
     id: "face-janus",
@@ -553,7 +633,19 @@ function createHeadBust(): THREE.Group {
   return normalizeObject(group);
 }
 
-const ASSET_DEMOS = new Set<DemoId>(["tripode", "tripode-case"]);
+const ASSET_DEMOS = new Set<DemoId>([
+  "tripode",
+  "tripode-case",
+  "raspberry-pi",
+  "arduino",
+  "guitar",
+  "piano",
+  "drum",
+  "trumpet",
+  "violin",
+  "saxophone",
+  "headphones",
+]);
 
 export function createDemoObject(id: DemoId): THREE.Group {
   if (ASSET_DEMOS.has(id)) {

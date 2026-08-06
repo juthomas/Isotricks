@@ -80,7 +80,16 @@ export type DemoId =
   | "face-mask"
   | "face-robot"
   | "face-cat"
-  | "head-bust";
+  | "head-bust"
+  | "guitar"
+  | "piano"
+  | "drum"
+  | "trumpet"
+  | "violin"
+  | "saxophone"
+  | "headphones"
+  | "raspberry-pi"
+  | "arduino";
 
 /** Built-in default model (bundled OBJ in /public/models) */
 export const DEFAULT_DEMO_ID: DemoId = "tripode";
@@ -93,6 +102,21 @@ export const TRIPODE_ASSET = {
 export const TRIPODE_CASE_ASSET = {
   url: "/models/Tripode_case_closed_rebaked.obj",
   fileName: "Tripode_case_closed_rebaked.obj",
+} as const;
+
+export const EXTERNAL_ASSETS = {
+  guitar: { url: "/models/guitar.glb", fileName: "guitar.glb" },
+  piano: { url: "/models/piano.glb", fileName: "piano.glb" },
+  drum: { url: "/models/drum.glb", fileName: "drum.glb" },
+  trumpet: { url: "/models/trumpet.glb", fileName: "trumpet.glb" },
+  violin: { url: "/models/violin.glb", fileName: "violin.glb" },
+  saxophone: { url: "/models/saxophone.glb", fileName: "saxophone.glb" },
+  headphones: { url: "/models/headphones.glb", fileName: "headphones.glb" },
+  "raspberry-pi": {
+    url: "/models/raspberry-pi.stl",
+    fileName: "raspberry-pi.stl",
+  },
+  arduino: { url: "/models/arduino.glb", fileName: "arduino.glb" },
 } as const;
 
 export const DEFAULT_GLOBAL_VIEW: GlobalViewSettings = {
