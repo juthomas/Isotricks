@@ -34,8 +34,8 @@ export type DemoId =
 export const DEFAULT_DEMO_ID: DemoId = "tripode";
 
 export const TRIPODE_ASSET = {
-  url: "/models/TripodeTDisplayBattery-Conducer-WirelessCharging_updated.obj",
-  fileName: "TripodeTDisplayBattery-Conducer-WirelessCharging_updated.obj",
+  url: "/models/tripode_ori_v2.obj",
+  fileName: "tripode_ori_v2.obj",
 } as const;
 
 export const DEFAULT_SETTINGS: ModelSettings = {
@@ -48,7 +48,7 @@ export const DEFAULT_SETTINGS: ModelSettings = {
   pointSize: 2.5,
   lineWidth: 1,
   autoRotate: true,
-  orbitEnabled: false,
+  orbitEnabled: true,
   depthColors: false,
   invertDepthColors: false,
 };
