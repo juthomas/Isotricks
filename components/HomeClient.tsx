@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import ControlPanel from "@/components/ControlPanel";
 import { DEMO_LIST, getDemo } from "@/lib/demos";
 import { demoObjectKey, fileObjectKey } from "@/lib/storage";
@@ -23,9 +23,30 @@ function defaultSource(): ObjectSource {
   return { kind: "demo", id: demo.id, label: demo.label };
 }
 
+function subscribeDesktop(onStoreChange: () => void) {
+  const mq = window.matchMedia("(min-width: 768px)");
+  mq.addEventListener("change", onStoreChange);
+  return () => mq.removeEventListener("change", onStoreChange);
+}
+
+function getDesktopSnapshot() {
+  return window.matchMedia("(min-width: 768px)").matches;
+}
+
+function getDesktopServerSnapshot() {
+  return false;
+}
+
 export default function HomeClient() {
   const [source, setSource] = useState<ObjectSource>(defaultSource);
-  const [panelOpen, setPanelOpen] = useState(true);
+  const isDesktop = useSyncExternalStore(
+    subscribeDesktop,
+    getDesktopSnapshot,
+    getDesktopServerSnapshot,
+  );
+  // null = follow viewport default (desktop open, mobile closed)
+  const [panelOverride, setPanelOverride] = useState<boolean | null>(null);
+  const panelOpen = panelOverride ?? isDesktop;
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
   const objectKey = useMemo(() => {
@@ -82,7 +103,7 @@ export default function HomeClient() {
       {!panelOpen && (
         <button
           type="button"
-          onClick={() => setPanelOpen(true)}
+          onClick={() => setPanelOverride(true)}
           className="absolute right-3 top-3 z-20 hidden rounded-lg bg-[#12121a]/95 px-3 py-2 text-sm text-zinc-200 ring-1 ring-zinc-700 backdrop-blur md:block"
         >
           Show controls
@@ -93,7 +114,7 @@ export default function HomeClient() {
         source={source}
         settings={settings}
         panelOpen={panelOpen}
-        onTogglePanel={() => setPanelOpen((o) => !o)}
+        onTogglePanel={() => setPanelOverride(!panelOpen)}
         onSelectDemo={onSelectDemo}
         onFile={onFile}
         onSettingsChange={(update) => setSettings(update)}

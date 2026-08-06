@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { DisplayMode, ModelSettings } from "@/lib/types";
 
@@ -14,99 +14,108 @@ type LoadedModelProps = {
   settings: ModelSettings;
 };
 
-/** Spectral-ish height map: blue (low) → cyan → green → yellow → red (high) */
-function heightToColor(t: number, target: THREE.Color) {
-  const clamped = Math.min(1, Math.max(0, t));
-  target.setHSL(0.66 * (1 - clamped), 0.9, 0.55);
+type DepthUniforms = {
+  uMinDepth: { value: number };
+  uMaxDepth: { value: number };
+  uInvertDepth: { value: number };
+};
+
+const DEPTH_VERTEX_PARS = /* glsl */ `
+varying float vViewDepth;
+`;
+
+const DEPTH_VERTEX_MAIN = /* glsl */ `
+vViewDepth = -mvPosition.z;
+`;
+
+const DEPTH_FRAGMENT_PARS = /* glsl */ `
+uniform float uMinDepth;
+uniform float uMaxDepth;
+uniform float uInvertDepth;
+varying float vViewDepth;
+
+vec3 depthGradient(float t) {
+  float h = 0.66 * (1.0 - clamp(t, 0.0, 1.0));
+  float s = 0.9;
+  float l = 0.55;
+  float c = (1.0 - abs(2.0 * l - 1.0)) * s;
+  float x = c * (1.0 - abs(mod(h * 6.0, 2.0) - 1.0));
+  float m = l - c * 0.5;
+  vec3 rgb;
+  if (h < 1.0/6.0) rgb = vec3(c, x, 0.0);
+  else if (h < 2.0/6.0) rgb = vec3(x, c, 0.0);
+  else if (h < 3.0/6.0) rgb = vec3(0.0, c, x);
+  else if (h < 4.0/6.0) rgb = vec3(0.0, x, c);
+  else if (h < 5.0/6.0) rgb = vec3(x, 0.0, c);
+  else rgb = vec3(c, 0.0, x);
+  return rgb + m;
+}
+`;
+
+const DEPTH_FRAGMENT_COLOR = /* glsl */ `
+float t = (vViewDepth - uMinDepth) / max(uMaxDepth - uMinDepth, 1e-5);
+t = clamp(t, 0.0, 1.0);
+if (uInvertDepth > 0.5) t = 1.0 - t;
+diffuseColor.rgb = depthGradient(t);
+`;
+
+function createDepthUniforms(): DepthUniforms {
+  return {
+    uMinDepth: { value: 0 },
+    uMaxDepth: { value: 1 },
+    uInvertDepth: { value: 0 },
+  };
 }
 
-function computeLocalBounds(root: THREE.Object3D): THREE.Box3 {
-  root.updateMatrixWorld(true);
-  const box = new THREE.Box3();
-  const v = new THREE.Vector3();
+function patchMaterialForDepth(
+  material: THREE.Material,
+  uniforms: DepthUniforms,
+): void {
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
 
-  root.traverse((child) => {
-    if (
-      !(
-        child instanceof THREE.Mesh ||
-        child instanceof THREE.Line ||
-        child instanceof THREE.LineSegments ||
-        child instanceof THREE.Points
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        `#include <common>\n${DEPTH_VERTEX_PARS}`,
       )
-    ) {
-      return;
-    }
-    const position = child.geometry?.getAttribute("position");
-    if (!position) return;
+      .replace(
+        "#include <project_vertex>",
+        `#include <project_vertex>\n${DEPTH_VERTEX_MAIN}`,
+      );
 
-    for (let i = 0; i < position.count; i++) {
-      v.fromBufferAttribute(position, i);
-      child.localToWorld(v);
-      root.worldToLocal(v);
-      box.expandByPoint(v);
+    if (shader.fragmentShader.includes("#include <color_fragment>")) {
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          "#include <common>",
+          `#include <common>\n${DEPTH_FRAGMENT_PARS}`,
+        )
+        .replace(
+          "#include <color_fragment>",
+          `#include <color_fragment>\n${DEPTH_FRAGMENT_COLOR}`,
+        );
+    } else {
+      // PointsMaterial / LineBasicMaterial have a simpler fragment shader
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          "void main() {",
+          `${DEPTH_FRAGMENT_PARS}\nvoid main() {`,
+        )
+        .replace(
+          "vec4 diffuseColor = vec4( diffuse, opacity );",
+          `vec4 diffuseColor = vec4( diffuse, opacity );\n${DEPTH_FRAGMENT_COLOR}`,
+        );
     }
-  });
-
-  return box;
+  };
+  material.customProgramCacheKey = () => "iso-depth-colors-v1";
+  material.needsUpdate = true;
 }
 
-function applyHeightVertexColors(root: THREE.Object3D): void {
-  const box = computeLocalBounds(root);
-  if (box.isEmpty()) return;
-
-  const minY = box.min.y;
-  const range = Math.max(box.max.y - minY, 1e-6);
-  const color = new THREE.Color();
-  const v = new THREE.Vector3();
-
-  root.updateMatrixWorld(true);
-
-  root.traverse((child) => {
-    if (
-      !(
-        child instanceof THREE.Mesh ||
-        child instanceof THREE.Line ||
-        child instanceof THREE.LineSegments ||
-        child instanceof THREE.Points
-      )
-    ) {
-      return;
-    }
-    if (child.parent?.name === "__iso_points") return;
-
-    const geometry = child.geometry;
-    const position = geometry?.getAttribute("position");
-    if (!position) return;
-
-    const colors = new Float32Array(position.count * 3);
-    for (let i = 0; i < position.count; i++) {
-      v.fromBufferAttribute(position, i);
-      child.localToWorld(v);
-      root.worldToLocal(v);
-      heightToColor((v.y - minY) / range, color);
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
-    }
-    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  });
-}
-
-function enableVertexColors(material: THREE.Material, enabled: boolean) {
-  if (
-    material instanceof THREE.MeshBasicMaterial ||
-    material instanceof THREE.MeshStandardMaterial ||
-    material instanceof THREE.MeshPhongMaterial ||
-    material instanceof THREE.MeshLambertMaterial ||
-    material instanceof THREE.LineBasicMaterial ||
-    material instanceof THREE.PointsMaterial
-  ) {
-    material.vertexColors = enabled;
-    if (enabled) {
-      material.color.setHex(0xffffff);
-    }
-    material.needsUpdate = true;
-  }
+function clearDepthPatch(material: THREE.Material): void {
+  material.onBeforeCompile = () => undefined;
+  // Force a fresh program without depth uniforms
+  material.customProgramCacheKey = () => "iso-depth-off";
+  material.needsUpdate = true;
 }
 
 function applyDisplayMode(
@@ -114,7 +123,8 @@ function applyDisplayMode(
   mode: DisplayMode,
   pointSize: number,
   lineWidth: number,
-  heightColors: boolean,
+  depthColors: boolean,
+  depthUniforms: DepthUniforms | null,
 ): () => void {
   const disposables: Array<{
     geometry?: THREE.BufferGeometry;
@@ -124,28 +134,17 @@ function applyDisplayMode(
     object: THREE.Object3D;
     visible: boolean;
   }> = [];
-  const coloredGeometries: THREE.BufferGeometry[] = [];
-
-  if (heightColors) {
-    applyHeightVertexColors(root);
-    root.traverse((child) => {
-      if (
-        child instanceof THREE.Mesh ||
-        child instanceof THREE.Line ||
-        child instanceof THREE.LineSegments
-      ) {
-        if (child.geometry?.getAttribute("color")) {
-          coloredGeometries.push(child.geometry);
-        }
-      }
-    });
-  }
+  const patchedMaterials: THREE.Material[] = [];
 
   const pointsGroup = new THREE.Group();
   pointsGroup.name = "__iso_points";
   root.add(pointsGroup);
 
-  const flatTint = heightColors ? 0xffffff : undefined;
+  const patch = (mat: THREE.Material) => {
+    if (!depthColors || !depthUniforms) return;
+    patchMaterialForDepth(mat, depthUniforms);
+    patchedMaterials.push(mat);
+  };
 
   root.traverse((child) => {
     if (child === pointsGroup) return;
@@ -166,11 +165,11 @@ function applyDisplayMode(
             mat instanceof THREE.MeshLambertMaterial
           ) {
             mat.wireframe = true;
-            mat.color?.setHex(flatTint ?? WIRE_COLOR);
-            enableVertexColors(mat, heightColors);
+            mat.color?.setHex(WIRE_COLOR);
             if ("emissive" in mat && mat.emissive) {
               mat.emissive.setHex(0x000000);
             }
+            patch(mat);
           }
         }
       } else if (mode === "solid") {
@@ -186,10 +185,10 @@ function applyDisplayMode(
             mat instanceof THREE.MeshLambertMaterial
           ) {
             mat.wireframe = false;
-            if (heightColors || !("map" in mat && mat.map)) {
-              mat.color?.setHex(flatTint ?? SOLID_COLOR);
+            if (!("map" in mat && mat.map)) {
+              mat.color?.setHex(SOLID_COLOR);
             }
-            enableVertexColors(mat, heightColors);
+            patch(mat);
           }
         }
       } else if (mode === "points") {
@@ -198,16 +197,12 @@ function applyDisplayMode(
         if (position) {
           const pointsGeo = new THREE.BufferGeometry();
           pointsGeo.setAttribute("position", position.clone());
-          const sourceColors = child.geometry.getAttribute("color");
-          if (heightColors && sourceColors) {
-            pointsGeo.setAttribute("color", sourceColors.clone());
-          }
           const pointsMat = new THREE.PointsMaterial({
-            color: heightColors ? 0xffffff : POINT_COLOR,
+            color: POINT_COLOR,
             size: pointSize * 0.02,
             sizeAttenuation: true,
-            vertexColors: heightColors,
           });
+          patch(pointsMat);
           const points = new THREE.Points(pointsGeo, pointsMat);
           child.updateWorldMatrix(true, false);
           points.position.copy(child.position);
@@ -228,16 +223,12 @@ function applyDisplayMode(
         if (position) {
           const pointsGeo = new THREE.BufferGeometry();
           pointsGeo.setAttribute("position", position.clone());
-          const sourceColors = child.geometry.getAttribute("color");
-          if (heightColors && sourceColors) {
-            pointsGeo.setAttribute("color", sourceColors.clone());
-          }
           const pointsMat = new THREE.PointsMaterial({
-            color: heightColors ? 0xffffff : POINT_COLOR,
+            color: POINT_COLOR,
             size: pointSize * 0.02,
             sizeAttenuation: true,
-            vertexColors: heightColors,
           });
+          patch(pointsMat);
           const points = new THREE.Points(pointsGeo, pointsMat);
           points.position.copy(child.position);
           points.quaternion.copy(child.quaternion);
@@ -246,14 +237,17 @@ function applyDisplayMode(
           disposables.push({ geometry: pointsGeo, material: pointsMat });
         }
       } else if (child.material instanceof THREE.LineBasicMaterial) {
-        child.material.color.setHex(flatTint ?? WIRE_COLOR);
+        child.material.color.setHex(WIRE_COLOR);
         child.material.linewidth = lineWidth;
-        enableVertexColors(child.material, heightColors);
+        patch(child.material);
       }
     }
   });
 
   return () => {
+    for (const mat of patchedMaterials) {
+      clearDepthPatch(mat);
+    }
     for (const { object, visible } of originals) {
       object.visible = visible;
       if (object instanceof THREE.Mesh) {
@@ -264,19 +258,8 @@ function applyDisplayMode(
           if ("wireframe" in mat) {
             (mat as THREE.MeshBasicMaterial).wireframe = false;
           }
-          enableVertexColors(mat, false);
-        }
-      } else if (
-        object instanceof THREE.Line ||
-        object instanceof THREE.LineSegments
-      ) {
-        if (object.material instanceof THREE.LineBasicMaterial) {
-          enableVertexColors(object.material, false);
         }
       }
-    }
-    for (const geometry of coloredGeometries) {
-      geometry.deleteAttribute("color");
     }
     root.remove(pointsGroup);
     pointsGroup.traverse((c) => {
@@ -302,6 +285,12 @@ function applyDisplayMode(
 
 export default function LoadedModel({ object, settings }: LoadedModelProps) {
   const groupRef = useRef<THREE.Group>(null);
+  const { camera } = useThree();
+  const depthUniformsRef = useRef(createDepthUniforms());
+  const sphereRef = useRef(new THREE.Sphere());
+  const boxRef = useRef(new THREE.Box3());
+  const cornerRef = useRef(new THREE.Vector3());
+  const viewMatrixRef = useRef(new THREE.Matrix4());
 
   const cloned = useMemo(() => object.clone(true), [object]);
 
@@ -311,7 +300,8 @@ export default function LoadedModel({ object, settings }: LoadedModelProps) {
       settings.displayMode,
       settings.pointSize,
       settings.lineWidth,
-      settings.heightColors,
+      settings.depthColors,
+      settings.depthColors ? depthUniformsRef.current : null,
     );
     return cleanup;
   }, [
@@ -319,14 +309,52 @@ export default function LoadedModel({ object, settings }: LoadedModelProps) {
     settings.displayMode,
     settings.pointSize,
     settings.lineWidth,
-    settings.heightColors,
+    settings.depthColors,
   ]);
 
   useFrame((_, delta) => {
     if (!groupRef.current) return;
+
     if (settings.autoRotate && settings.rotationDirection !== 0) {
       groupRef.current.rotation.y +=
         settings.rotationDirection * settings.rotationSpeed * delta;
+    }
+
+    if (settings.depthColors) {
+      const depthUniforms = depthUniformsRef.current;
+      depthUniforms.uInvertDepth.value = settings.invertDepthColors ? 1 : 0;
+
+      groupRef.current.updateWorldMatrix(true, true);
+      const box = boxRef.current.setFromObject(groupRef.current);
+      if (!box.isEmpty()) {
+        box.getBoundingSphere(sphereRef.current);
+        const sphere = sphereRef.current;
+        viewMatrixRef.current.copy(camera.matrixWorldInverse);
+
+        let minD = Infinity;
+        let maxD = -Infinity;
+        const c = cornerRef.current;
+        for (let i = 0; i < 8; i++) {
+          c.set(
+            i & 1 ? box.max.x : box.min.x,
+            i & 2 ? box.max.y : box.min.y,
+            i & 4 ? box.max.z : box.min.z,
+          );
+          c.applyMatrix4(viewMatrixRef.current);
+          const d = -c.z;
+          minD = Math.min(minD, d);
+          maxD = Math.max(maxD, d);
+        }
+        const centerView = cornerRef.current
+          .copy(sphere.center)
+          .applyMatrix4(viewMatrixRef.current);
+        const centerD = -centerView.z;
+        minD = Math.min(minD, centerD - sphere.radius);
+        maxD = Math.max(maxD, centerD + sphere.radius);
+
+        depthUniforms.uMinDepth.value = minD;
+        depthUniforms.uMaxDepth.value = Math.max(maxD, minD + 1e-4);
+      }
     }
   });
 

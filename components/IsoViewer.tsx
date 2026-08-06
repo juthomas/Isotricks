@@ -26,12 +26,22 @@ function IsoCamera({
   const { size } = useThree();
   const cameraRef = useRef<THREE.OrthographicCamera>(null);
 
-  const aspect = size.width / Math.max(size.height, 1);
-  const frustum = 2.5 / Math.max(zoom, 0.05);
-
   useLayoutEffect(() => {
     const cam = cameraRef.current;
     if (!cam) return;
+
+    const w = Math.max(size.width, 1);
+    const h = Math.max(size.height, 1);
+    const aspect = w / h;
+    const frustum = 2.5 / Math.max(zoom, 0.05);
+
+    cam.left = -frustum * aspect;
+    cam.right = frustum * aspect;
+    cam.top = frustum;
+    cam.bottom = -frustum;
+    cam.near = -100;
+    cam.far = 100;
+
     const distance = 5;
     const phi = THREE.MathUtils.degToRad(90 - angleX);
     const theta = THREE.MathUtils.degToRad(angleY);
@@ -39,16 +49,12 @@ function IsoCamera({
     cam.lookAt(0, 0, 0);
     cam.updateProjectionMatrix();
     cam.updateMatrixWorld();
-  }, [angleX, angleY]);
+  }, [size.width, size.height, zoom, angleX, angleY]);
 
   return (
     <OrthographicCamera
       ref={cameraRef}
       makeDefault
-      left={-frustum * aspect}
-      right={frustum * aspect}
-      top={frustum}
-      bottom={-frustum}
       near={-100}
       far={100}
       position={[5, 5, 5]}
@@ -65,7 +71,6 @@ export default function IsoViewer({
   return (
     <div className="relative h-full w-full bg-[#0a0a0f]">
       <Canvas
-        orthographic
         dpr={[1, 2]}
         gl={{ antialias: true, alpha: false }}
         onCreated={({ gl }) => {

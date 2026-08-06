@@ -21,6 +21,25 @@ type ControlPanelProps = {
   onResetSettings: () => void;
 };
 
+function GearIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+    </svg>
+  );
+}
+
 function SliderRow({
   label,
   value,
@@ -80,16 +99,21 @@ export default function ControlPanel({
   onResetSettings,
 }: ControlPanelProps) {
   const activeDemoId = source.kind === "demo" ? source.id : null;
+  const nearLabel = settings.invertDepthColors ? "Far" : "Near";
+  const farLabel = settings.invertDepthColors ? "Near" : "Far";
 
   return (
     <>
-      <button
-        type="button"
-        onClick={onTogglePanel}
-        className="absolute right-3 top-3 z-20 rounded-lg bg-[#12121a]/95 px-3 py-2 text-sm text-zinc-200 ring-1 ring-zinc-700 backdrop-blur md:hidden"
-      >
-        {panelOpen ? "Hide controls" : "Controls"}
-      </button>
+      {!panelOpen && (
+        <button
+          type="button"
+          onClick={onTogglePanel}
+          aria-label="Open settings"
+          className="absolute right-3 top-3 z-20 flex size-11 items-center justify-center rounded-xl bg-[#12121a]/95 text-zinc-200 ring-1 ring-zinc-700 backdrop-blur transition-colors hover:bg-zinc-800 hover:text-white md:hidden"
+        >
+          <GearIcon className="size-5" />
+        </button>
+      )}
 
       <aside
         className={`absolute right-0 top-0 z-10 flex h-full w-full max-w-sm flex-col border-l border-zinc-800/80 bg-[#12121a]/95 text-zinc-200 shadow-2xl backdrop-blur-md transition-transform duration-200 ${
@@ -108,9 +132,11 @@ export default function ControlPanel({
           <button
             type="button"
             onClick={onTogglePanel}
-            className="rounded-md px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 md:hidden"
+            aria-label="Close settings"
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
           >
-            Close
+            <GearIcon className="size-5 md:hidden" />
+            <span className="hidden text-xl leading-none md:inline">×</span>
           </button>
         </div>
 
@@ -151,28 +177,42 @@ export default function ControlPanel({
               ))}
             </div>
             <label className="flex items-center justify-between text-xs text-zinc-400">
-              <span>Height colors</span>
+              <span>Depth colors</span>
               <input
                 type="checkbox"
-                checked={settings.heightColors}
+                checked={settings.depthColors}
                 onChange={(e) =>
-                  onSettingsChange({ heightColors: e.target.checked })
+                  onSettingsChange({ depthColors: e.target.checked })
                 }
                 className="size-4 accent-indigo-500"
               />
             </label>
-            {settings.heightColors && (
-              <div className="space-y-1">
-                <div
-                  className="h-2 w-full rounded-full"
-                  style={{
-                    background:
-                      "linear-gradient(90deg, #3b82f6, #22d3ee, #4ade80, #facc15, #ef4444)",
-                  }}
-                />
-                <div className="flex justify-between text-[10px] text-zinc-600">
-                  <span>Low</span>
-                  <span>High</span>
+            {settings.depthColors && (
+              <div className="space-y-2">
+                <label className="flex items-center justify-between text-xs text-zinc-400">
+                  <span>Invert</span>
+                  <input
+                    type="checkbox"
+                    checked={settings.invertDepthColors}
+                    onChange={(e) =>
+                      onSettingsChange({ invertDepthColors: e.target.checked })
+                    }
+                    className="size-4 accent-indigo-500"
+                  />
+                </label>
+                <div className="space-y-1">
+                  <div
+                    className="h-2 w-full rounded-full"
+                    style={{
+                      background: settings.invertDepthColors
+                        ? "linear-gradient(90deg, #ef4444, #facc15, #4ade80, #22d3ee, #3b82f6)"
+                        : "linear-gradient(90deg, #3b82f6, #22d3ee, #4ade80, #facc15, #ef4444)",
+                    }}
+                  />
+                  <div className="flex justify-between text-[10px] text-zinc-600">
+                    <span>{nearLabel}</span>
+                    <span>{farLabel}</span>
+                  </div>
                 </div>
               </div>
             )}
