@@ -13,6 +13,8 @@ export type ModelSettings = {
   lineWidth: number;
   autoRotate: boolean;
   orbitEnabled: boolean;
+  /** Color geometry by local height (Y) */
+  heightColors: boolean;
 };
 
 export type ObjectSource =
@@ -45,6 +47,7 @@ export const DEFAULT_SETTINGS: ModelSettings = {
   lineWidth: 1,
   autoRotate: true,
   orbitEnabled: false,
+  heightColors: false,
 };
 
 export const STORAGE_KEY = "iso_tricks:settings";

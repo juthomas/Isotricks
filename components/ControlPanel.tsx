@@ -150,6 +150,32 @@ export default function ControlPanel({
                 </button>
               ))}
             </div>
+            <label className="flex items-center justify-between text-xs text-zinc-400">
+              <span>Height colors</span>
+              <input
+                type="checkbox"
+                checked={settings.heightColors}
+                onChange={(e) =>
+                  onSettingsChange({ heightColors: e.target.checked })
+                }
+                className="size-4 accent-indigo-500"
+              />
+            </label>
+            {settings.heightColors && (
+              <div className="space-y-1">
+                <div
+                  className="h-2 w-full rounded-full"
+                  style={{
+                    background:
+                      "linear-gradient(90deg, #3b82f6, #22d3ee, #4ade80, #facc15, #ef4444)",
+                  }}
+                />
+                <div className="flex justify-between text-[10px] text-zinc-600">
+                  <span>Low</span>
+                  <span>High</span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">

@@ -14,21 +14,138 @@ type LoadedModelProps = {
   settings: ModelSettings;
 };
 
+/** Spectral-ish height map: blue (low) → cyan → green → yellow → red (high) */
+function heightToColor(t: number, target: THREE.Color) {
+  const clamped = Math.min(1, Math.max(0, t));
+  target.setHSL(0.66 * (1 - clamped), 0.9, 0.55);
+}
+
+function computeLocalBounds(root: THREE.Object3D): THREE.Box3 {
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3();
+  const v = new THREE.Vector3();
+
+  root.traverse((child) => {
+    if (
+      !(
+        child instanceof THREE.Mesh ||
+        child instanceof THREE.Line ||
+        child instanceof THREE.LineSegments ||
+        child instanceof THREE.Points
+      )
+    ) {
+      return;
+    }
+    const position = child.geometry?.getAttribute("position");
+    if (!position) return;
+
+    for (let i = 0; i < position.count; i++) {
+      v.fromBufferAttribute(position, i);
+      child.localToWorld(v);
+      root.worldToLocal(v);
+      box.expandByPoint(v);
+    }
+  });
+
+  return box;
+}
+
+function applyHeightVertexColors(root: THREE.Object3D): void {
+  const box = computeLocalBounds(root);
+  if (box.isEmpty()) return;
+
+  const minY = box.min.y;
+  const range = Math.max(box.max.y - minY, 1e-6);
+  const color = new THREE.Color();
+  const v = new THREE.Vector3();
+
+  root.updateMatrixWorld(true);
+
+  root.traverse((child) => {
+    if (
+      !(
+        child instanceof THREE.Mesh ||
+        child instanceof THREE.Line ||
+        child instanceof THREE.LineSegments ||
+        child instanceof THREE.Points
+      )
+    ) {
+      return;
+    }
+    if (child.parent?.name === "__iso_points") return;
+
+    const geometry = child.geometry;
+    const position = geometry?.getAttribute("position");
+    if (!position) return;
+
+    const colors = new Float32Array(position.count * 3);
+    for (let i = 0; i < position.count; i++) {
+      v.fromBufferAttribute(position, i);
+      child.localToWorld(v);
+      root.worldToLocal(v);
+      heightToColor((v.y - minY) / range, color);
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+    }
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  });
+}
+
+function enableVertexColors(material: THREE.Material, enabled: boolean) {
+  if (
+    material instanceof THREE.MeshBasicMaterial ||
+    material instanceof THREE.MeshStandardMaterial ||
+    material instanceof THREE.MeshPhongMaterial ||
+    material instanceof THREE.MeshLambertMaterial ||
+    material instanceof THREE.LineBasicMaterial ||
+    material instanceof THREE.PointsMaterial
+  ) {
+    material.vertexColors = enabled;
+    if (enabled) {
+      material.color.setHex(0xffffff);
+    }
+    material.needsUpdate = true;
+  }
+}
+
 function applyDisplayMode(
   root: THREE.Object3D,
   mode: DisplayMode,
   pointSize: number,
   lineWidth: number,
+  heightColors: boolean,
 ): () => void {
-  const disposables: Array<{ geometry?: THREE.BufferGeometry; material?: THREE.Material | THREE.Material[] }> = [];
+  const disposables: Array<{
+    geometry?: THREE.BufferGeometry;
+    material?: THREE.Material | THREE.Material[];
+  }> = [];
   const originals: Array<{
     object: THREE.Object3D;
     visible: boolean;
   }> = [];
+  const coloredGeometries: THREE.BufferGeometry[] = [];
+
+  if (heightColors) {
+    applyHeightVertexColors(root);
+    root.traverse((child) => {
+      if (
+        child instanceof THREE.Mesh ||
+        child instanceof THREE.Line ||
+        child instanceof THREE.LineSegments
+      ) {
+        if (child.geometry?.getAttribute("color")) {
+          coloredGeometries.push(child.geometry);
+        }
+      }
+    });
+  }
 
   const pointsGroup = new THREE.Group();
   pointsGroup.name = "__iso_points";
   root.add(pointsGroup);
+
+  const flatTint = heightColors ? 0xffffff : undefined;
 
   root.traverse((child) => {
     if (child === pointsGroup) return;
@@ -49,7 +166,8 @@ function applyDisplayMode(
             mat instanceof THREE.MeshLambertMaterial
           ) {
             mat.wireframe = true;
-            mat.color?.setHex(WIRE_COLOR);
+            mat.color?.setHex(flatTint ?? WIRE_COLOR);
+            enableVertexColors(mat, heightColors);
             if ("emissive" in mat && mat.emissive) {
               mat.emissive.setHex(0x000000);
             }
@@ -68,9 +186,10 @@ function applyDisplayMode(
             mat instanceof THREE.MeshLambertMaterial
           ) {
             mat.wireframe = false;
-            if (!("map" in mat && mat.map)) {
-              mat.color?.setHex(SOLID_COLOR);
+            if (heightColors || !("map" in mat && mat.map)) {
+              mat.color?.setHex(flatTint ?? SOLID_COLOR);
             }
+            enableVertexColors(mat, heightColors);
           }
         }
       } else if (mode === "points") {
@@ -79,14 +198,17 @@ function applyDisplayMode(
         if (position) {
           const pointsGeo = new THREE.BufferGeometry();
           pointsGeo.setAttribute("position", position.clone());
+          const sourceColors = child.geometry.getAttribute("color");
+          if (heightColors && sourceColors) {
+            pointsGeo.setAttribute("color", sourceColors.clone());
+          }
           const pointsMat = new THREE.PointsMaterial({
-            color: POINT_COLOR,
+            color: heightColors ? 0xffffff : POINT_COLOR,
             size: pointSize * 0.02,
             sizeAttenuation: true,
+            vertexColors: heightColors,
           });
           const points = new THREE.Points(pointsGeo, pointsMat);
-          points.matrix.copy(child.matrixWorld);
-          // Place in local space relative to root
           child.updateWorldMatrix(true, false);
           points.position.copy(child.position);
           points.quaternion.copy(child.quaternion);
@@ -95,7 +217,10 @@ function applyDisplayMode(
           disposables.push({ geometry: pointsGeo, material: pointsMat });
         }
       }
-    } else if (child instanceof THREE.LineSegments || child instanceof THREE.Line) {
+    } else if (
+      child instanceof THREE.LineSegments ||
+      child instanceof THREE.Line
+    ) {
       originals.push({ object: child, visible: child.visible });
       child.visible = mode !== "points";
       if (mode === "points") {
@@ -103,10 +228,15 @@ function applyDisplayMode(
         if (position) {
           const pointsGeo = new THREE.BufferGeometry();
           pointsGeo.setAttribute("position", position.clone());
+          const sourceColors = child.geometry.getAttribute("color");
+          if (heightColors && sourceColors) {
+            pointsGeo.setAttribute("color", sourceColors.clone());
+          }
           const pointsMat = new THREE.PointsMaterial({
-            color: POINT_COLOR,
+            color: heightColors ? 0xffffff : POINT_COLOR,
             size: pointSize * 0.02,
             sizeAttenuation: true,
+            vertexColors: heightColors,
           });
           const points = new THREE.Points(pointsGeo, pointsMat);
           points.position.copy(child.position);
@@ -116,8 +246,9 @@ function applyDisplayMode(
           disposables.push({ geometry: pointsGeo, material: pointsMat });
         }
       } else if (child.material instanceof THREE.LineBasicMaterial) {
-        child.material.color.setHex(WIRE_COLOR);
+        child.material.color.setHex(flatTint ?? WIRE_COLOR);
         child.material.linewidth = lineWidth;
+        enableVertexColors(child.material, heightColors);
       }
     }
   });
@@ -133,8 +264,19 @@ function applyDisplayMode(
           if ("wireframe" in mat) {
             (mat as THREE.MeshBasicMaterial).wireframe = false;
           }
+          enableVertexColors(mat, false);
+        }
+      } else if (
+        object instanceof THREE.Line ||
+        object instanceof THREE.LineSegments
+      ) {
+        if (object.material instanceof THREE.LineBasicMaterial) {
+          enableVertexColors(object.material, false);
         }
       }
+    }
+    for (const geometry of coloredGeometries) {
+      geometry.deleteAttribute("color");
     }
     root.remove(pointsGroup);
     pointsGroup.traverse((c) => {
@@ -169,9 +311,16 @@ export default function LoadedModel({ object, settings }: LoadedModelProps) {
       settings.displayMode,
       settings.pointSize,
       settings.lineWidth,
+      settings.heightColors,
     );
     return cleanup;
-  }, [cloned, settings.displayMode, settings.pointSize, settings.lineWidth]);
+  }, [
+    cloned,
+    settings.displayMode,
+    settings.pointSize,
+    settings.lineWidth,
+    settings.heightColors,
+  ]);
 
   useFrame((_, delta) => {
     if (!groupRef.current) return;

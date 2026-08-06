@@ -47,7 +47,14 @@ pnpm start    # serve production build
 pnpm lint     # ESLint
 ```
 
-## Stack
+## Deploy on Vercel
 
-- Next.js (App Router) + TypeScript + Tailwind CSS
-- three / @react-three/fiber / @react-three/drei / three-stdlib
+1. Import the GitHub repo on [vercel.com](https://vercel.com/new).
+2. In **Settings → Build and Deployment**:
+   - **Framework Preset**: `Next.js` (required — `Other` causes sitewide `404: NOT_FOUND`)
+   - **Output Directory**: leave **empty** (do not set `public`, `out`, or `.next`)
+   - **Install Command**: `pnpm install` (or leave default)
+   - **Build Command**: `pnpm run build` (or leave default)
+3. Redeploy (**Deployments → … → Redeploy**, uncheck build cache if needed).
+
+A [`vercel.json`](vercel.json) in the repo pins the framework to Next.js.
