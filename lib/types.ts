@@ -25,6 +25,7 @@ export type ObjectSource =
 
 export type DemoId =
   | "tripode"
+  | "tripode-case"
   | "necker-cube"
   | "tetrahedron"
   | "open-frame"
@@ -36,6 +37,11 @@ export const DEFAULT_DEMO_ID: DemoId = "tripode";
 export const TRIPODE_ASSET = {
   url: "/models/tripode_ori_v2.obj",
   fileName: "tripode_ori_v2.obj",
+} as const;
+
+export const TRIPODE_CASE_ASSET = {
+  url: "/models/Tripode_case_closed_rebaked.obj",
+  fileName: "Tripode_case_closed_rebaked.obj",
 } as const;
 
 export const DEFAULT_SETTINGS: ModelSettings = {

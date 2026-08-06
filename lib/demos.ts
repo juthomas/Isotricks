@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { DemoId } from "./types";
-import { TRIPODE_ASSET } from "./types";
+import { TRIPODE_ASSET, TRIPODE_CASE_ASSET } from "./types";
 
 export type DemoDefinition = {
   id: DemoId;
@@ -18,6 +18,13 @@ export const DEMO_LIST: DemoDefinition[] = [
     description: "T-Display battery · wireless charging",
     assetUrl: TRIPODE_ASSET.url,
     assetFileName: TRIPODE_ASSET.fileName,
+  },
+  {
+    id: "tripode-case",
+    label: "Tripode Case",
+    description: "Closed case · rebaked",
+    assetUrl: TRIPODE_CASE_ASSET.url,
+    assetFileName: TRIPODE_CASE_ASSET.fileName,
   },
   {
     id: "necker-cube",
@@ -139,8 +146,9 @@ function createTorusKnot(): THREE.Group {
 export function createDemoObject(id: DemoId): THREE.Group {
   switch (id) {
     case "tripode":
+    case "tripode-case":
       throw new Error(
-        "Tripode is an asset demo — load via assetUrl, not createDemoObject",
+        "Asset demo — load via assetUrl, not createDemoObject",
       );
     case "necker-cube":
       return createNeckerCube();
