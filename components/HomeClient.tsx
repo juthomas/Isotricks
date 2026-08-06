@@ -87,18 +87,27 @@ export default function HomeClient() {
     [blobUrl, setSettings],
   );
 
-  // Auto-cycle through built-in demos
+  // Auto-cycle through built-in demos (random order, never the same twice in a row)
   useEffect(() => {
     if (!settings.autoCycle) return;
 
     const ms = Math.max(2, settings.autoCycleSeconds) * 1000;
     const id = window.setInterval(() => {
       setSource((prev) => {
+        if (DEMO_LIST.length === 0) return prev;
+        if (DEMO_LIST.length === 1) {
+          const only = DEMO_LIST[0];
+          return { kind: "demo", id: only.id, label: only.label };
+        }
+
         const currentIndex =
           prev.kind === "demo"
             ? DEMO_LIST.findIndex((d) => d.id === prev.id)
             : -1;
-        const nextIndex = (currentIndex + 1) % DEMO_LIST.length;
+        let nextIndex = Math.floor(Math.random() * DEMO_LIST.length);
+        if (nextIndex === currentIndex) {
+          nextIndex = (nextIndex + 1) % DEMO_LIST.length;
+        }
         const demo = DEMO_LIST[nextIndex];
         return { kind: "demo", id: demo.id, label: demo.label };
       });

@@ -129,9 +129,11 @@ function applyDisplayMode(
   const originals: Array<{
     object: THREE.Object3D;
     visible: boolean;
+    material?: THREE.Material | THREE.Material[];
   }> = [];
   const patchedMaterials: THREE.Material[] = [];
   const createdPoints: THREE.Points[] = [];
+  const createdMaterials: THREE.Material[] = [];
 
   // Ensure world matrices are current before baking points into the same space
   root.updateMatrixWorld(true);
@@ -164,28 +166,23 @@ function applyDisplayMode(
     }
 
     if (child instanceof THREE.Mesh) {
-      originals.push({ object: child, visible: child.visible });
+      originals.push({
+        object: child,
+        visible: child.visible,
+        material: child.material,
+      });
 
       if (mode === "wireframe") {
         child.visible = true;
-        const mats = Array.isArray(child.material)
-          ? child.material
-          : [child.material];
-        for (const mat of mats) {
-          if (
-            mat instanceof THREE.MeshBasicMaterial ||
-            mat instanceof THREE.MeshStandardMaterial ||
-            mat instanceof THREE.MeshPhongMaterial ||
-            mat instanceof THREE.MeshLambertMaterial
-          ) {
-            mat.wireframe = true;
-            mat.color?.setHex(WIRE_COLOR);
-            if ("emissive" in mat && mat.emissive) {
-              mat.emissive.setHex(0x000000);
-            }
-            patch(mat);
-          }
-        }
+        // Dedicated material — ignore object textures / vertex colors / MTL tint
+        const wireMat = new THREE.MeshBasicMaterial({
+          color: WIRE_COLOR,
+          wireframe: true,
+          toneMapped: false,
+        });
+        createdMaterials.push(wireMat);
+        patch(wireMat);
+        child.material = wireMat;
       } else if (mode === "solid") {
         child.visible = true;
         const mats = Array.isArray(child.material)
@@ -224,7 +221,11 @@ function applyDisplayMode(
       child instanceof THREE.LineSegments ||
       child instanceof THREE.Line
     ) {
-      originals.push({ object: child, visible: child.visible });
+      originals.push({
+        object: child,
+        visible: child.visible,
+        material: child.material,
+      });
       child.visible = mode !== "points";
       if (mode === "points") {
         const position = child.geometry.getAttribute("position");
@@ -239,10 +240,15 @@ function applyDisplayMode(
           patch(pointsMat);
           addPointsMatching(child, pointsGeo, pointsMat);
         }
-      } else if (child.material instanceof THREE.LineBasicMaterial) {
-        child.material.color.setHex(WIRE_COLOR);
-        child.material.linewidth = lineWidth;
-        patch(child.material);
+      } else {
+        const lineMat = new THREE.LineBasicMaterial({
+          color: WIRE_COLOR,
+          linewidth: lineWidth,
+          toneMapped: false,
+        });
+        createdMaterials.push(lineMat);
+        patch(lineMat);
+        child.material = lineMat;
       }
     }
   });
@@ -251,8 +257,18 @@ function applyDisplayMode(
     for (const mat of patchedMaterials) {
       clearDepthPatch(mat);
     }
-    for (const { object, visible } of originals) {
+    for (const { object, visible, material } of originals) {
       object.visible = visible;
+      if (material !== undefined) {
+        if (object instanceof THREE.Mesh) {
+          object.material = material;
+        } else if (
+          object instanceof THREE.LineSegments ||
+          object instanceof THREE.Line
+        ) {
+          object.material = material as THREE.Material;
+        }
+      }
       if (object instanceof THREE.Mesh) {
         const mats = Array.isArray(object.material)
           ? object.material
@@ -272,6 +288,9 @@ function applyDisplayMode(
       } else {
         points.material.dispose();
       }
+    }
+    for (const mat of createdMaterials) {
+      mat.dispose();
     }
   };
 }
