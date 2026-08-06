@@ -343,9 +343,10 @@ export default function ControlPanel({
               <SliderRow
                 label="Point size"
                 value={settings.pointSize}
-                min={0.5}
+                min={1}
                 max={10}
                 step={0.1}
+                display={`${settings.pointSize.toFixed(1)}px`}
                 onChange={(pointSize) => onSettingsChange({ pointSize })}
               />
             </div>

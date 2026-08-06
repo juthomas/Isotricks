@@ -74,6 +74,109 @@ function IsoCamera({
   );
 }
 
+function SafeOrbitControls({
+  enabled,
+}: {
+  enabled: boolean;
+}) {
+  const controlsRef = useRef<{ domElement: HTMLElement | null } | null>(null);
+
+  useEffect(() => {
+    let cleaned = false;
+    let detach: (() => void) | null = null;
+
+    const attach = () => {
+      const dom = controlsRef.current?.domElement;
+      if (cleaned || detach) return true;
+      if (!dom) return false;
+
+      let activePointerId: number | null = null;
+
+      const clearActive = () => {
+        activePointerId = null;
+      };
+
+      const forceEnd = () => {
+        if (activePointerId === null) return;
+        const pointerId = activePointerId;
+        activePointerId = null;
+        // three-stdlib OrbitControls listens on ownerDocument; synthetic up clears stuck drag
+        dom.ownerDocument.dispatchEvent(
+          new PointerEvent("pointerup", {
+            bubbles: true,
+            cancelable: true,
+            pointerId,
+            pointerType: "mouse",
+            button: 0,
+            buttons: 0,
+            view: window,
+          }),
+        );
+      };
+
+      const onPointerDown = (event: PointerEvent) => {
+        activePointerId = event.pointerId;
+      };
+
+      const onPointerUp = (event: PointerEvent) => {
+        if (event.pointerId === activePointerId) clearActive();
+      };
+
+      const onPointerMove = (event: PointerEvent) => {
+        // Released outside the window: buttons is 0 but controls still think we're dragging
+        if (event.buttons === 0 && activePointerId !== null) {
+          forceEnd();
+        }
+      };
+
+      const onBlur = () => forceEnd();
+
+      dom.addEventListener("pointerdown", onPointerDown);
+      document.addEventListener("pointerup", onPointerUp);
+      document.addEventListener("pointercancel", onPointerUp);
+      document.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("blur", onBlur);
+
+      detach = () => {
+        dom.removeEventListener("pointerdown", onPointerDown);
+        document.removeEventListener("pointerup", onPointerUp);
+        document.removeEventListener("pointercancel", onPointerUp);
+        document.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("blur", onBlur);
+      };
+      return true;
+    };
+
+    let pollId: number | null = null;
+    if (!attach()) {
+      pollId = window.setInterval(() => {
+        if (attach() && pollId !== null) {
+          window.clearInterval(pollId);
+          pollId = null;
+        }
+      }, 50);
+    }
+
+    return () => {
+      cleaned = true;
+      if (pollId !== null) window.clearInterval(pollId);
+      detach?.();
+    };
+  }, []);
+
+  return (
+    <OrbitControls
+      ref={controlsRef as never}
+      enabled={enabled}
+      enableDamping
+      dampingFactor={0.08}
+      enablePan={false}
+      minZoom={0.2}
+      maxZoom={8}
+    />
+  );
+}
+
 export default function IsoViewer({
   object,
   settings,
@@ -185,14 +288,7 @@ export default function IsoViewer({
             <LoadedModel object={displayObject} settings={settings} />
           )}
           {settings.orbitEnabled && (
-            <OrbitControls
-              enabled={orbitInteractive}
-              enableDamping
-              dampingFactor={0.08}
-              enablePan={false}
-              minZoom={0.2}
-              maxZoom={8}
-            />
+            <SafeOrbitControls enabled={orbitInteractive} />
           )}
         </Canvas>
       </div>

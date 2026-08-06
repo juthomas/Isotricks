@@ -123,7 +123,7 @@ export const DEFAULT_GLOBAL_VIEW: GlobalViewSettings = {
   displayMode: "points",
   depthColors: false,
   invertDepthColors: false,
-  pointSize: 2.5,
+  pointSize: 2,
   lineWidth: 1,
   autoCycle: false,
   autoCycleSeconds: 8,

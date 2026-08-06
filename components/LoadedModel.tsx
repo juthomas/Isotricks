@@ -9,6 +9,17 @@ const WIRE_COLOR = 0xa1a1aa;
 const SOLID_COLOR = 0x71717a;
 const POINT_COLOR = 0xa1a1aa;
 
+/** Depth-independent combine: keep color (no additive white blowout), no front/back. */
+const OVERLAP_BLENDING = {
+  blending: THREE.CustomBlending,
+  blendEquation: THREE.MaxEquation,
+  blendSrc: THREE.OneFactor,
+  blendDst: THREE.OneFactor,
+  transparent: true,
+  depthWrite: false,
+  depthTest: false,
+} as const;
+
 type LoadedModelProps = {
   object: THREE.Object3D;
   settings: ModelSettings;
@@ -179,6 +190,7 @@ function applyDisplayMode(
           color: WIRE_COLOR,
           wireframe: true,
           toneMapped: false,
+          ...OVERLAP_BLENDING,
         });
         createdMaterials.push(wireMat);
         patch(wireMat);
@@ -210,8 +222,11 @@ function applyDisplayMode(
           pointsGeo.setAttribute("position", position.clone());
           const pointsMat = new THREE.PointsMaterial({
             color: POINT_COLOR,
-            size: pointSize * 0.02,
-            sizeAttenuation: true,
+            // Orthographic camera: size in screen pixels (attenuation breaks sizing)
+            size: Math.min(10, Math.max(1, pointSize)),
+            sizeAttenuation: false,
+            toneMapped: false,
+            ...OVERLAP_BLENDING,
           });
           patch(pointsMat);
           addPointsMatching(child, pointsGeo, pointsMat);
@@ -234,21 +249,28 @@ function applyDisplayMode(
           pointsGeo.setAttribute("position", position.clone());
           const pointsMat = new THREE.PointsMaterial({
             color: POINT_COLOR,
-            size: pointSize * 0.02,
-            sizeAttenuation: true,
+            size: Math.min(10, Math.max(1, pointSize)),
+            sizeAttenuation: false,
+            toneMapped: false,
+            ...OVERLAP_BLENDING,
           });
           patch(pointsMat);
           addPointsMatching(child, pointsGeo, pointsMat);
         }
-      } else {
+      } else if (mode === "wireframe") {
         const lineMat = new THREE.LineBasicMaterial({
           color: WIRE_COLOR,
           linewidth: lineWidth,
           toneMapped: false,
+          ...OVERLAP_BLENDING,
         });
         createdMaterials.push(lineMat);
         patch(lineMat);
         child.material = lineMat;
+      } else if (child.material instanceof THREE.LineBasicMaterial) {
+        child.material.color.setHex(WIRE_COLOR);
+        child.material.linewidth = lineWidth;
+        patch(child.material);
       }
     }
   });
