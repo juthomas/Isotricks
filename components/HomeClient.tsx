@@ -74,6 +74,8 @@ export default function HomeClient() {
       if (blobUrl) URL.revokeObjectURL(blobUrl);
       const url = URL.createObjectURL(file);
       setBlobUrl(url);
+      // Uploading a custom file pauses auto-cycle so the import stays visible
+      setSettings({ autoCycle: false });
       setSource({
         kind: "file",
         id: fileObjectKey(file.name, file.size),
@@ -82,8 +84,28 @@ export default function HomeClient() {
         fileName: file.name,
       });
     },
-    [blobUrl],
+    [blobUrl, setSettings],
   );
+
+  // Auto-cycle through built-in demos
+  useEffect(() => {
+    if (!settings.autoCycle) return;
+
+    const ms = Math.max(2, settings.autoCycleSeconds) * 1000;
+    const id = window.setInterval(() => {
+      setSource((prev) => {
+        const currentIndex =
+          prev.kind === "demo"
+            ? DEMO_LIST.findIndex((d) => d.id === prev.id)
+            : -1;
+        const nextIndex = (currentIndex + 1) % DEMO_LIST.length;
+        const demo = DEMO_LIST[nextIndex];
+        return { kind: "demo", id: demo.id, label: demo.label };
+      });
+    }, ms);
+
+    return () => window.clearInterval(id);
+  }, [settings.autoCycle, settings.autoCycleSeconds]);
 
   return (
     <div className="relative h-dvh w-full overflow-hidden bg-[#0a0a0f]">

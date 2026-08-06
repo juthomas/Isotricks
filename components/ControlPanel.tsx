@@ -149,7 +149,7 @@ export default function ControlPanel({
               {source.label}
             </p>
             <p className="mt-1 text-[10px] text-zinc-600">
-              Settings saved locally for this object
+              View mode is project-wide · camera saved per object
             </p>
           </div>
 
@@ -215,6 +215,30 @@ export default function ControlPanel({
                   </div>
                 </div>
               </div>
+            )}
+            <label className="flex items-center justify-between text-xs text-zinc-400">
+              <span>Auto-cycle models</span>
+              <input
+                type="checkbox"
+                checked={settings.autoCycle}
+                onChange={(e) =>
+                  onSettingsChange({ autoCycle: e.target.checked })
+                }
+                className="size-4 accent-indigo-500"
+              />
+            </label>
+            {settings.autoCycle && (
+              <SliderRow
+                label="Interval (seconds)"
+                value={settings.autoCycleSeconds}
+                min={2}
+                max={60}
+                step={1}
+                display={`${Math.round(settings.autoCycleSeconds)}s`}
+                onChange={(autoCycleSeconds) =>
+                  onSettingsChange({ autoCycleSeconds })
+                }
+              />
             )}
           </div>
 
@@ -355,7 +379,7 @@ export default function ControlPanel({
             onClick={onResetSettings}
             className="w-full rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-200 ring-1 ring-zinc-700 transition-colors hover:bg-zinc-700"
           >
-            Reset to defaults
+            Reset object defaults
           </button>
         </div>
       </aside>

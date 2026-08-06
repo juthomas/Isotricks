@@ -2,22 +2,51 @@ export type DisplayMode = "wireframe" | "points" | "solid";
 
 export type RotationDirection = 1 | -1 | 0;
 
-export type ModelSettings = {
+/** Project-wide view prefs (shared across all models) */
+export type GlobalViewSettings = {
   displayMode: DisplayMode;
+  depthColors: boolean;
+  invertDepthColors: boolean;
+  pointSize: number;
+  lineWidth: number;
+  /** Cycle through built-in demos automatically */
+  autoCycle: boolean;
+  /** Seconds between model changes */
+  autoCycleSeconds: number;
+};
+
+/** Per-object camera / motion prefs */
+export type ObjectSettings = {
   rotationSpeed: number;
   rotationDirection: RotationDirection;
   angleX: number;
   angleY: number;
   zoom: number;
-  pointSize: number;
-  lineWidth: number;
   autoRotate: boolean;
   orbitEnabled: boolean;
-  /** Color geometry by camera depth (near / far) */
-  depthColors: boolean;
-  /** Flip near/far color mapping */
-  invertDepthColors: boolean;
 };
+
+export type ModelSettings = GlobalViewSettings & ObjectSettings;
+
+export const GLOBAL_VIEW_KEYS = [
+  "displayMode",
+  "depthColors",
+  "invertDepthColors",
+  "pointSize",
+  "lineWidth",
+  "autoCycle",
+  "autoCycleSeconds",
+] as const satisfies readonly (keyof GlobalViewSettings)[];
+
+export const OBJECT_SETTING_KEYS = [
+  "rotationSpeed",
+  "rotationDirection",
+  "angleX",
+  "angleY",
+  "zoom",
+  "autoRotate",
+  "orbitEnabled",
+] as const satisfies readonly (keyof ObjectSettings)[];
 
 export type ObjectSource =
   | { kind: "demo"; id: DemoId; label: string }
@@ -29,7 +58,29 @@ export type DemoId =
   | "necker-cube"
   | "tetrahedron"
   | "open-frame"
-  | "torus-knot";
+  | "torus-knot"
+  | "octahedron"
+  | "dodecahedron"
+  | "icosahedron"
+  | "sphere"
+  | "cone"
+  | "cylinder"
+  | "capsule"
+  | "torus"
+  | "pyramid"
+  | "stellated-tetra"
+  | "helix"
+  | "mobius"
+  | "cross"
+  | "stairs"
+  | "ring-cubes"
+  | "crystal"
+  | "arrow"
+  | "face-janus"
+  | "face-mask"
+  | "face-robot"
+  | "face-cat"
+  | "head-bust";
 
 /** Built-in default model (bundled OBJ in /public/models) */
 export const DEFAULT_DEMO_ID: DemoId = "tripode";
@@ -44,19 +95,30 @@ export const TRIPODE_CASE_ASSET = {
   fileName: "Tripode_case_closed_rebaked.obj",
 } as const;
 
-export const DEFAULT_SETTINGS: ModelSettings = {
+export const DEFAULT_GLOBAL_VIEW: GlobalViewSettings = {
   displayMode: "points",
+  depthColors: false,
+  invertDepthColors: false,
+  pointSize: 2.5,
+  lineWidth: 1,
+  autoCycle: false,
+  autoCycleSeconds: 8,
+};
+
+export const DEFAULT_OBJECT_SETTINGS: ObjectSettings = {
   rotationSpeed: 0.4,
   rotationDirection: 1,
   angleX: 35.264,
   angleY: 45,
   zoom: 1,
-  pointSize: 2.5,
-  lineWidth: 1,
   autoRotate: true,
   orbitEnabled: true,
-  depthColors: false,
-  invertDepthColors: false,
+};
+
+export const DEFAULT_SETTINGS: ModelSettings = {
+  ...DEFAULT_GLOBAL_VIEW,
+  ...DEFAULT_OBJECT_SETTINGS,
 };
 
 export const STORAGE_KEY = "iso_tricks:settings";
+export const GLOBAL_VIEW_STORAGE_KEY = "iso_tricks:view";
