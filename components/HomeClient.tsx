@@ -224,12 +224,6 @@ export default function HomeClient() {
     };
   }, [immersive]);
 
-  const viewerSettings = useMemo(
-    () =>
-      immersive ? { ...settings, orbitEnabled: false } : settings,
-    [immersive, settings],
-  );
-
   const onSelectDemo = useCallback((id: DemoId) => {
     const demo = DEMO_LIST.find((d) => d.id === id);
     if (!demo) return;
@@ -348,7 +342,8 @@ export default function HomeClient() {
       >
         <IsoViewer
           object={loadState.object}
-          settings={viewerSettings}
+          settings={settings}
+          orbitInteractive={!immersive}
           loading={loadState.status === "loading"}
           error={immersive ? null : loadState.error}
         />

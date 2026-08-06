@@ -12,6 +12,8 @@ type IsoViewerProps = {
   settings: ModelSettings;
   loading?: boolean;
   error?: string | null;
+  /** When false, orbit stays mounted but ignores input (keeps camera pose). */
+  orbitInteractive?: boolean;
 };
 
 const FADE_MS = 180;
@@ -29,6 +31,7 @@ function IsoCamera({
   const { size } = useThree();
   const cameraRef = useRef<THREE.OrthographicCamera>(null);
 
+  // Projection only — keep current camera pose on resize (orbit / fullscreen)
   useLayoutEffect(() => {
     const cam = cameraRef.current;
     if (!cam) return;
@@ -44,15 +47,21 @@ function IsoCamera({
     cam.bottom = -frustum;
     cam.near = -100;
     cam.far = 100;
+    cam.updateProjectionMatrix();
+  }, [size.width, size.height, zoom]);
+
+  // Pose from explicit angle settings (sliders), not from resize
+  useLayoutEffect(() => {
+    const cam = cameraRef.current;
+    if (!cam) return;
 
     const distance = 5;
     const phi = THREE.MathUtils.degToRad(90 - angleX);
     const theta = THREE.MathUtils.degToRad(angleY);
     cam.position.setFromSpherical(new THREE.Spherical(distance, phi, theta));
     cam.lookAt(0, 0, 0);
-    cam.updateProjectionMatrix();
     cam.updateMatrixWorld();
-  }, [size.width, size.height, zoom, angleX, angleY]);
+  }, [angleX, angleY]);
 
   return (
     <OrthographicCamera
@@ -70,6 +79,7 @@ export default function IsoViewer({
   settings,
   loading = false,
   error = null,
+  orbitInteractive = true,
 }: IsoViewerProps) {
   const [showLoading, setShowLoading] = useState(false);
   const [displayObject, setDisplayObject] = useState<THREE.Object3D | null>(
@@ -176,6 +186,7 @@ export default function IsoViewer({
           )}
           {settings.orbitEnabled && (
             <OrbitControls
+              enabled={orbitInteractive}
               enableDamping
               dampingFactor={0.08}
               enablePan={false}
