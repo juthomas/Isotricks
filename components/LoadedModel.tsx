@@ -126,19 +126,15 @@ function applyDisplayMode(
   depthColors: boolean,
   depthUniforms: DepthUniforms | null,
 ): () => void {
-  const disposables: Array<{
-    geometry?: THREE.BufferGeometry;
-    material?: THREE.Material | THREE.Material[];
-  }> = [];
   const originals: Array<{
     object: THREE.Object3D;
     visible: boolean;
   }> = [];
   const patchedMaterials: THREE.Material[] = [];
+  const createdPoints: THREE.Points[] = [];
 
-  const pointsGroup = new THREE.Group();
-  pointsGroup.name = "__iso_points";
-  root.add(pointsGroup);
+  // Ensure world matrices are current before baking points into the same space
+  root.updateMatrixWorld(true);
 
   const patch = (mat: THREE.Material) => {
     if (!depthColors || !depthUniforms) return;
@@ -146,8 +142,26 @@ function applyDisplayMode(
     patchedMaterials.push(mat);
   };
 
+  /** Place Points with the same world transform as `source` (handles nested GLB hierarchies). */
+  const addPointsMatching = (
+    source: THREE.Object3D,
+    geometry: THREE.BufferGeometry,
+    material: THREE.PointsMaterial,
+  ) => {
+    const points = new THREE.Points(geometry, material);
+    const parent = source.parent ?? root;
+    // Match source's local transform under the same parent
+    points.position.copy(source.position);
+    points.quaternion.copy(source.quaternion);
+    points.scale.copy(source.scale);
+    parent.add(points);
+    createdPoints.push(points);
+  };
+
   root.traverse((child) => {
-    if (child === pointsGroup) return;
+    if (child instanceof THREE.Points && createdPoints.includes(child)) {
+      return;
+    }
 
     if (child instanceof THREE.Mesh) {
       originals.push({ object: child, visible: child.visible });
@@ -203,13 +217,7 @@ function applyDisplayMode(
             sizeAttenuation: true,
           });
           patch(pointsMat);
-          const points = new THREE.Points(pointsGeo, pointsMat);
-          child.updateWorldMatrix(true, false);
-          points.position.copy(child.position);
-          points.quaternion.copy(child.quaternion);
-          points.scale.copy(child.scale);
-          pointsGroup.add(points);
-          disposables.push({ geometry: pointsGeo, material: pointsMat });
+          addPointsMatching(child, pointsGeo, pointsMat);
         }
       }
     } else if (
@@ -229,12 +237,7 @@ function applyDisplayMode(
             sizeAttenuation: true,
           });
           patch(pointsMat);
-          const points = new THREE.Points(pointsGeo, pointsMat);
-          points.position.copy(child.position);
-          points.quaternion.copy(child.quaternion);
-          points.scale.copy(child.scale);
-          pointsGroup.add(points);
-          disposables.push({ geometry: pointsGeo, material: pointsMat });
+          addPointsMatching(child, pointsGeo, pointsMat);
         }
       } else if (child.material instanceof THREE.LineBasicMaterial) {
         child.material.color.setHex(WIRE_COLOR);
@@ -261,23 +264,13 @@ function applyDisplayMode(
         }
       }
     }
-    root.remove(pointsGroup);
-    pointsGroup.traverse((c) => {
-      if (c instanceof THREE.Points) {
-        c.geometry.dispose();
-        if (Array.isArray(c.material)) {
-          c.material.forEach((m) => m.dispose());
-        } else {
-          c.material.dispose();
-        }
-      }
-    });
-    for (const d of disposables) {
-      d.geometry?.dispose();
-      if (Array.isArray(d.material)) {
-        d.material.forEach((m) => m.dispose());
+    for (const points of createdPoints) {
+      points.parent?.remove(points);
+      points.geometry.dispose();
+      if (Array.isArray(points.material)) {
+        points.material.forEach((m) => m.dispose());
       } else {
-        d.material?.dispose();
+        points.material.dispose();
       }
     }
   };

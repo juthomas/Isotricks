@@ -6,10 +6,11 @@ import { createDemoObject, getDemo } from "@/lib/demos";
 import { loadModelFromUrl } from "@/lib/loaders";
 import type { ObjectSource } from "@/lib/types";
 
-type LoadState =
-  | { status: "loading"; object: null; error: null }
-  | { status: "ready"; object: THREE.Object3D; error: null }
-  | { status: "error"; object: null; error: string };
+export type LoadState = {
+  status: "loading" | "ready" | "error";
+  object: THREE.Object3D | null;
+  error: string | null;
+};
 
 export function useLoadedObject(source: ObjectSource): LoadState {
   const sourceKey =
@@ -24,10 +25,14 @@ export function useLoadedObject(source: ObjectSource): LoadState {
   });
   const [loadedKey, setLoadedKey] = useState(sourceKey);
 
-  // Reset when source changes (render-phase adjustment)
+  // Keep the previous object visible while the next one loads (no blank flash)
   if (loadedKey !== sourceKey) {
     setLoadedKey(sourceKey);
-    setState({ status: "loading", object: null, error: null });
+    setState((prev) => ({
+      status: "loading",
+      object: prev.object,
+      error: null,
+    }));
   }
 
   useEffect(() => {
@@ -53,11 +58,11 @@ export function useLoadedObject(source: ObjectSource): LoadState {
         }
       } catch (err) {
         if (!cancelled) {
-          setState({
+          setState((prev) => ({
             status: "error",
-            object: null,
+            object: prev.object,
             error: err instanceof Error ? err.message : "Failed to load model",
-          });
+          }));
         }
       }
     }

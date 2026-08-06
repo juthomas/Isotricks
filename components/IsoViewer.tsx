@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, OrthographicCamera } from "@react-three/drei";
 import * as THREE from "three";
@@ -13,6 +13,9 @@ type IsoViewerProps = {
   loading?: boolean;
   error?: string | null;
 };
+
+const FADE_MS = 180;
+const LOADING_DELAY_MS = 1000;
 
 function IsoCamera({
   angleX,
@@ -68,38 +71,123 @@ export default function IsoViewer({
   loading = false,
   error = null,
 }: IsoViewerProps) {
+  const [showLoading, setShowLoading] = useState(false);
+  const [displayObject, setDisplayObject] = useState<THREE.Object3D | null>(
+    null,
+  );
+  const [fadeOpacity, setFadeOpacity] = useState(0);
+  const displayedRef = useRef<THREE.Object3D | null>(null);
+
+  // Hide loading indicator immediately when load ends (render-phase adjust)
+  if (!loading && showLoading) {
+    setShowLoading(false);
+  }
+
+  // Only show "Loading model…" if load takes longer than 1s
+  useEffect(() => {
+    if (!loading) return;
+    const timer = window.setTimeout(
+      () => setShowLoading(true),
+      LOADING_DELAY_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [loading]);
+
+  // Quick fade when the loaded object instance changes
+  useEffect(() => {
+    let cancelled = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    const schedule = (fn: () => void, ms: number) => {
+      timers.push(setTimeout(fn, ms));
+    };
+
+    schedule(() => {
+      if (cancelled) return;
+
+      if (!object) {
+        setFadeOpacity(0);
+        return;
+      }
+
+      if (displayedRef.current === object) {
+        setFadeOpacity(1);
+        return;
+      }
+
+      const hadPrevious =
+        displayedRef.current !== null && displayedRef.current !== object;
+
+      if (hadPrevious) {
+        setFadeOpacity(0);
+        schedule(() => {
+          if (cancelled) return;
+          displayedRef.current = object;
+          setDisplayObject(object);
+          schedule(() => {
+            if (!cancelled) setFadeOpacity(1);
+          }, 16);
+        }, FADE_MS);
+      } else {
+        displayedRef.current = object;
+        setDisplayObject(object);
+        setFadeOpacity(0);
+        schedule(() => {
+          if (!cancelled) setFadeOpacity(1);
+        }, 16);
+      }
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+    };
+  }, [object]);
+
   return (
     <div className="relative h-full w-full bg-[#0a0a0f]">
-      <Canvas
-        dpr={[1, 2]}
-        gl={{ antialias: true, alpha: false }}
-        onCreated={({ gl }) => {
-          gl.setClearColor("#0a0a0f", 1);
+      <div
+        className="h-full w-full"
+        style={{
+          opacity: fadeOpacity,
+          transition: `opacity ${FADE_MS}ms ease`,
         }}
       >
-        <ambientLight intensity={settings.displayMode === "solid" ? 0.85 : 1} />
-        {settings.displayMode === "solid" && (
-          <directionalLight position={[4, 6, 2]} intensity={0.45} />
-        )}
-        <IsoCamera
-          angleX={settings.angleX}
-          angleY={settings.angleY}
-          zoom={settings.zoom}
-        />
-        {object && <LoadedModel object={object} settings={settings} />}
-        {settings.orbitEnabled && (
-          <OrbitControls
-            enableDamping
-            dampingFactor={0.08}
-            enablePan={false}
-            minZoom={0.2}
-            maxZoom={8}
+        <Canvas
+          dpr={[1, 2]}
+          gl={{ antialias: true, alpha: false }}
+          onCreated={({ gl }) => {
+            gl.setClearColor("#0a0a0f", 1);
+          }}
+        >
+          <ambientLight
+            intensity={settings.displayMode === "solid" ? 0.85 : 1}
           />
-        )}
-      </Canvas>
+          {settings.displayMode === "solid" && (
+            <directionalLight position={[4, 6, 2]} intensity={0.45} />
+          )}
+          <IsoCamera
+            angleX={settings.angleX}
+            angleY={settings.angleY}
+            zoom={settings.zoom}
+          />
+          {displayObject && (
+            <LoadedModel object={displayObject} settings={settings} />
+          )}
+          {settings.orbitEnabled && (
+            <OrbitControls
+              enableDamping
+              dampingFactor={0.08}
+              enablePan={false}
+              minZoom={0.2}
+              maxZoom={8}
+            />
+          )}
+        </Canvas>
+      </div>
 
-      {loading && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      {showLoading && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[#0a0a0f]/40">
           <p className="text-sm text-zinc-500">Loading model…</p>
         </div>
       )}
