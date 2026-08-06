@@ -3,6 +3,7 @@ import {
   DEFAULT_OBJECT_SETTINGS,
   DEFAULT_SETTINGS,
   GLOBAL_VIEW_STORAGE_KEY,
+  LAST_SOURCE_STORAGE_KEY,
   STORAGE_KEY,
   type GlobalViewSettings,
   type ModelSettings,
@@ -190,4 +191,43 @@ export function fileObjectKey(fileName: string, fileSize: number): string {
 
 export function demoObjectKey(demoId: string): string {
   return `demo:${demoId}`;
+}
+
+export function userModelObjectKey(modelId: string): string {
+  return `file:${modelId}`;
+}
+
+type PersistedSource =
+  | { kind: "demo"; id: string }
+  | { kind: "file"; id: string };
+
+export function saveLastSource(source: {
+  kind: "demo" | "file";
+  id: string;
+}): void {
+  if (!canUseStorage()) return;
+  try {
+    const payload: PersistedSource = { kind: source.kind, id: source.id };
+    localStorage.setItem(LAST_SOURCE_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore quota / private mode errors
+  }
+}
+
+export function loadLastSource(): PersistedSource | null {
+  if (!canUseStorage()) return null;
+  try {
+    const raw = localStorage.getItem(LAST_SOURCE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PersistedSource;
+    if (
+      (parsed.kind === "demo" || parsed.kind === "file") &&
+      typeof parsed.id === "string"
+    ) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }

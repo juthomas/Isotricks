@@ -146,3 +146,4 @@ export const DEFAULT_SETTINGS: ModelSettings = {
 
 export const STORAGE_KEY = "iso_tricks:settings";
 export const GLOBAL_VIEW_STORAGE_KEY = "iso_tricks:view";
+export const LAST_SOURCE_STORAGE_KEY = "iso_tricks:last_source";

@@ -4,10 +4,22 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import ControlPanel from "@/components/ControlPanel";
 import { DEMO_LIST, getDemo } from "@/lib/demos";
-import { demoObjectKey, fileObjectKey } from "@/lib/storage";
+import {
+  demoObjectKey,
+  loadLastSource,
+  saveLastSource,
+  userModelObjectKey,
+} from "@/lib/storage";
 import { useLoadedObject } from "@/hooks/useLoadedObject";
 import { useModelSettings } from "@/hooks/useModelSettings";
 import { DEFAULT_DEMO_ID, type DemoId, type ObjectSource } from "@/lib/types";
+import {
+  deleteUserModel,
+  getUserModelBlob,
+  listUserModels,
+  saveUserModel,
+  type UserModelMeta,
+} from "@/lib/userModels";
 
 const IsoViewer = dynamic(() => import("@/components/IsoViewer"), {
   ssr: false,
@@ -71,13 +83,15 @@ export default function HomeClient() {
   const [panelOverride, setPanelOverride] = useState<boolean | null>(null);
   const panelOpen = panelOverride ?? isDesktop;
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [savedModels, setSavedModels] = useState<UserModelMeta[]>([]);
+  const [sourceReady, setSourceReady] = useState(false);
   const [immersive, setImmersive] = useState(false);
   const [cursorHidden, setCursorHidden] = useState(false);
   const cursorHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const objectKey = useMemo(() => {
     if (source.kind === "demo") return demoObjectKey(source.id);
-    return source.id;
+    return userModelObjectKey(source.id);
   }, [source]);
 
   const { settings, setSettings, resetSettings } = useModelSettings(objectKey);
@@ -88,6 +102,55 @@ export default function HomeClient() {
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
   }, [blobUrl]);
+
+  // Restore saved imports + last viewed source from this browser
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrate() {
+      try {
+        const models = await listUserModels();
+        if (cancelled) return;
+        setSavedModels(models);
+
+        const last = loadLastSource();
+        if (last?.kind === "file") {
+          const loaded = await getUserModelBlob(last.id);
+          if (cancelled) return;
+          if (loaded) {
+            const url = URL.createObjectURL(loaded.blob);
+            setBlobUrl(url);
+            setSource({
+              kind: "file",
+              id: loaded.meta.id,
+              label: loaded.meta.fileName,
+              url,
+              fileName: loaded.meta.fileName,
+            });
+          }
+        } else if (last?.kind === "demo") {
+          const demo = DEMO_LIST.find((d) => d.id === last.id);
+          if (demo) {
+            setSource({ kind: "demo", id: demo.id, label: demo.label });
+          }
+        }
+      } catch {
+        // IndexedDB unavailable — keep default demo
+      } finally {
+        if (!cancelled) setSourceReady(true);
+      }
+    }
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!sourceReady) return;
+    saveLastSource({ kind: source.kind, id: source.id });
+  }, [source, sourceReady]);
 
   const exitImmersive = useCallback(() => {
     setImmersive(false);
@@ -173,22 +236,72 @@ export default function HomeClient() {
     setSource({ kind: "demo", id: demo.id, label: demo.label });
   }, []);
 
-  const onFile = useCallback(
-    (file: File) => {
+  const openSavedModel = useCallback(
+    async (id: string) => {
+      const loaded = await getUserModelBlob(id);
+      if (!loaded) return;
       if (blobUrl) URL.revokeObjectURL(blobUrl);
-      const url = URL.createObjectURL(file);
+      const url = URL.createObjectURL(loaded.blob);
       setBlobUrl(url);
-      // Uploading a custom file pauses auto-cycle so the import stays visible
       setSettings({ autoCycle: false });
       setSource({
         kind: "file",
-        id: fileObjectKey(file.name, file.size),
-        label: file.name,
+        id: loaded.meta.id,
+        label: loaded.meta.fileName,
         url,
-        fileName: file.name,
+        fileName: loaded.meta.fileName,
       });
     },
     [blobUrl, setSettings],
+  );
+
+  const onFile = useCallback(
+    async (file: File) => {
+      try {
+        const meta = await saveUserModel(file);
+        setSavedModels(await listUserModels());
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        const url = URL.createObjectURL(file);
+        setBlobUrl(url);
+        // Uploading a custom file pauses auto-cycle so the import stays visible
+        setSettings({ autoCycle: false });
+        setSource({
+          kind: "file",
+          id: meta.id,
+          label: meta.fileName,
+          url,
+          fileName: meta.fileName,
+        });
+      } catch {
+        // Fallback: session-only blob if IndexedDB write fails
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        const url = URL.createObjectURL(file);
+        setBlobUrl(url);
+        setSettings({ autoCycle: false });
+        setSource({
+          kind: "file",
+          id: crypto.randomUUID(),
+          label: file.name,
+          url,
+          fileName: file.name,
+        });
+      }
+    },
+    [blobUrl, setSettings],
+  );
+
+  const onDeleteSavedModel = useCallback(
+    async (id: string) => {
+      await deleteUserModel(id);
+      setSavedModels(await listUserModels());
+      if (source.kind === "file" && source.id === id) {
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        setBlobUrl(null);
+        const demo = getDemo(DEFAULT_DEMO_ID);
+        setSource({ kind: "demo", id: demo.id, label: demo.label });
+      }
+    },
+    [blobUrl, source],
   );
 
   // Auto-cycle through built-in demos (random order, never the same twice in a row)
@@ -283,9 +396,16 @@ export default function HomeClient() {
           source={source}
           settings={settings}
           panelOpen={panelOpen}
+          savedModels={savedModels}
           onTogglePanel={() => setPanelOverride(!panelOpen)}
           onSelectDemo={onSelectDemo}
           onFile={onFile}
+          onSelectSavedModel={(id) => {
+            void openSavedModel(id);
+          }}
+          onDeleteSavedModel={(id) => {
+            void onDeleteSavedModel(id);
+          }}
           onSettingsChange={(update) => setSettings(update)}
           onResetSettings={resetSettings}
         />

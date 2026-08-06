@@ -9,14 +9,18 @@ import type {
   ObjectSource,
   RotationDirection,
 } from "@/lib/types";
+import type { UserModelMeta } from "@/lib/userModels";
 
 type ControlPanelProps = {
   source: ObjectSource;
   settings: ModelSettings;
   panelOpen: boolean;
+  savedModels: UserModelMeta[];
   onTogglePanel: () => void;
   onSelectDemo: (id: DemoId) => void;
   onFile: (file: File) => void;
+  onSelectSavedModel: (id: string) => void;
+  onDeleteSavedModel: (id: string) => void;
   onSettingsChange: (update: Partial<ModelSettings>) => void;
   onResetSettings: () => void;
 };
@@ -92,13 +96,17 @@ export default function ControlPanel({
   source,
   settings,
   panelOpen,
+  savedModels,
   onTogglePanel,
   onSelectDemo,
   onFile,
+  onSelectSavedModel,
+  onDeleteSavedModel,
   onSettingsChange,
   onResetSettings,
 }: ControlPanelProps) {
   const activeDemoId = source.kind === "demo" ? source.id : null;
+  const activeSavedId = source.kind === "file" ? source.id : null;
   const nearLabel = settings.invertDepthColors ? "Far" : "Near";
   const farLabel = settings.invertDepthColors ? "Near" : "Far";
 
@@ -141,6 +149,14 @@ export default function ControlPanel({
         </div>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4">
+          <FileUpload
+            activeId={activeSavedId}
+            savedModels={savedModels}
+            onFile={onFile}
+            onSelectSaved={onSelectSavedModel}
+            onDeleteSaved={onDeleteSavedModel}
+          />
+
           <div className="rounded-lg bg-zinc-900/60 px-3 py-2 ring-1 ring-zinc-800">
             <p className="text-[10px] uppercase tracking-wider text-zinc-500">
               Current object
@@ -154,7 +170,6 @@ export default function ControlPanel({
           </div>
 
           <DemoPicker activeId={activeDemoId} onSelect={onSelectDemo} />
-          <FileUpload onFile={onFile} />
 
           <div className="space-y-2">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
