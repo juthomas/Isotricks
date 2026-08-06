@@ -39,7 +39,7 @@ export const TRIPODE_ASSET = {
 } as const;
 
 export const DEFAULT_SETTINGS: ModelSettings = {
-  displayMode: "wireframe",
+  displayMode: "points",
   rotationSpeed: 0.4,
   rotationDirection: 1,
   angleX: 35.264,

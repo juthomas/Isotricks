@@ -1,52 +1,40 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { loadSettings, saveSettings } from "@/lib/storage";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
+import {
+  getSettingsServerSnapshot,
+  getSettingsSnapshot,
+  parseSettingsSnapshot,
+  saveSettings,
+  subscribeSettings,
+} from "@/lib/storage";
 import { DEFAULT_SETTINGS, type ModelSettings } from "@/lib/types";
 
 export function useModelSettings(objectKey: string) {
-  const [settings, setSettingsState] = useState<ModelSettings>(() =>
-    loadSettings(objectKey),
+  const snapshot = useSyncExternalStore(
+    subscribeSettings,
+    () => getSettingsSnapshot(objectKey),
+    () => getSettingsServerSnapshot(objectKey),
   );
-  const [activeKey, setActiveKey] = useState(objectKey);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Adjust state when the object key changes (React-recommended pattern)
-  if (objectKey !== activeKey) {
-    setActiveKey(objectKey);
-    setSettingsState(loadSettings(objectKey));
-  }
-
-  const persist = useCallback((next: ModelSettings, key: string) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      saveSettings(key, next);
-    }, 300);
-  }, []);
+  const settings = useMemo(
+    () => parseSettingsSnapshot(snapshot),
+    [snapshot],
+  );
 
   const setSettings = useCallback(
     (update: Partial<ModelSettings> | ((prev: ModelSettings) => ModelSettings)) => {
-      setSettingsState((prev) => {
-        const next =
-          typeof update === "function" ? update(prev) : { ...prev, ...update };
-        persist(next, objectKey);
-        return next;
-      });
+      const prev = parseSettingsSnapshot(getSettingsSnapshot(objectKey));
+      const next =
+        typeof update === "function" ? update(prev) : { ...prev, ...update };
+      saveSettings(objectKey, next);
     },
-    [persist, objectKey],
+    [objectKey],
   );
 
   const resetSettings = useCallback(() => {
-    const next = { ...DEFAULT_SETTINGS };
-    setSettingsState(next);
-    persist(next, objectKey);
-  }, [persist, objectKey]);
-
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
+    saveSettings(objectKey, { ...DEFAULT_SETTINGS });
+  }, [objectKey]);
 
   return { settings, setSettings, resetSettings };
 }
