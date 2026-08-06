@@ -20,10 +20,19 @@ export type ObjectSource =
   | { kind: "file"; id: string; label: string; url: string; fileName: string };
 
 export type DemoId =
+  | "tripode"
   | "necker-cube"
   | "tetrahedron"
   | "open-frame"
   | "torus-knot";
+
+/** Built-in default model (bundled OBJ in /public/models) */
+export const DEFAULT_DEMO_ID: DemoId = "tripode";
+
+export const TRIPODE_ASSET = {
+  url: "/models/TripodeTDisplayBattery-Conducer-WirelessCharging_updated.obj",
+  fileName: "TripodeTDisplayBattery-Conducer-WirelessCharging_updated.obj",
+} as const;
 
 export const DEFAULT_SETTINGS: ModelSettings = {
   displayMode: "wireframe",

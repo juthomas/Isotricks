@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OBJLoader } from "three-stdlib";
+import { MTLLoader } from "three-stdlib";
 import { STLLoader } from "three-stdlib";
 import { PLYLoader } from "three-stdlib";
 import { GLTFLoader } from "three-stdlib";
@@ -59,6 +60,14 @@ function ensureRenderable(object: THREE.Object3D): THREE.Object3D {
         : [child.material];
       for (const mat of materials) {
         mat.side = THREE.DoubleSide;
+        // Lift near-black MTL diffuse colors so solid mode stays visible
+        if (
+          "color" in mat &&
+          mat.color instanceof THREE.Color &&
+          mat.color.r + mat.color.g + mat.color.b < 0.05
+        ) {
+          mat.color.setHex(0xa1a1aa);
+        }
       }
       if (!child.geometry.attributes.normal) {
         child.geometry.computeVertexNormals();
@@ -68,15 +77,34 @@ function ensureRenderable(object: THREE.Object3D): THREE.Object3D {
   return object;
 }
 
+async function loadObjWithOptionalMtl(url: string): Promise<THREE.Object3D> {
+  const slash = url.lastIndexOf("/");
+  const base = slash >= 0 ? url.slice(0, slash + 1) : "/";
+  const fileName = slash >= 0 ? url.slice(slash + 1) : url;
+  const mtlName = fileName.replace(/\.obj$/i, ".mtl");
+
+  try {
+    const mtlLoader = new MTLLoader();
+    mtlLoader.setPath(base);
+    mtlLoader.setResourcePath(base);
+    const materials = await mtlLoader.loadAsync(mtlName);
+    materials.preload();
+    const objLoader = new OBJLoader();
+    objLoader.setMaterials(materials);
+    return ensureRenderable(await objLoader.loadAsync(url));
+  } catch {
+    const loader = new OBJLoader();
+    return ensureRenderable(await loader.loadAsync(url));
+  }
+}
+
 async function loadFromUrl(
   url: string,
   extension: string,
 ): Promise<THREE.Object3D> {
   switch (extension) {
     case "obj": {
-      const loader = new OBJLoader();
-      const group = await loader.loadAsync(url);
-      return ensureRenderable(group);
+      return loadObjWithOptionalMtl(url);
     }
     case "stl": {
       const loader = new STLLoader();

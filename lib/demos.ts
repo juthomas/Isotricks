@@ -1,13 +1,24 @@
 import * as THREE from "three";
 import type { DemoId } from "./types";
+import { TRIPODE_ASSET } from "./types";
 
 export type DemoDefinition = {
   id: DemoId;
   label: string;
   description: string;
+  /** If set, load this public asset instead of procedural geometry */
+  assetUrl?: string;
+  assetFileName?: string;
 };
 
 export const DEMO_LIST: DemoDefinition[] = [
+  {
+    id: "tripode",
+    label: "Tripode",
+    description: "T-Display battery · wireless charging",
+    assetUrl: TRIPODE_ASSET.url,
+    assetFileName: TRIPODE_ASSET.fileName,
+  },
   {
     id: "necker-cube",
     label: "Necker Cube",
@@ -29,6 +40,12 @@ export const DEMO_LIST: DemoDefinition[] = [
     description: "Twisted ambiguous loop",
   },
 ];
+
+export function getDemo(id: DemoId): DemoDefinition {
+  const demo = DEMO_LIST.find((d) => d.id === id);
+  if (!demo) throw new Error(`Unknown demo: ${id}`);
+  return demo;
+}
 
 function normalizeObject(object: THREE.Object3D, targetSize = 2): THREE.Group {
   const group = new THREE.Group();
@@ -121,6 +138,10 @@ function createTorusKnot(): THREE.Group {
 
 export function createDemoObject(id: DemoId): THREE.Group {
   switch (id) {
+    case "tripode":
+      throw new Error(
+        "Tripode is an asset demo — load via assetUrl, not createDemoObject",
+      );
     case "necker-cube":
       return createNeckerCube();
     case "tetrahedron":

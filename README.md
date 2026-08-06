@@ -8,7 +8,7 @@ Ambiguous wireframe and point-cloud views of 3D objects — classic Necker-cube 
 
 - **Orthographic (isometric) camera** — no perspective foreshortening
 - **Display modes**: Wireframe, Points, Solid
-- **Built-in demos**: Necker Cube, Tetrahedron, Open Frame, Torus Knot
+- **Built-in demos**: Tripode (default), Necker Cube, Tetrahedron, Open Frame, Torus Knot
 - **File import**: `.obj`, `.stl`, `.glb`, `.gltf`, `.ply`
 - **Per-object controls** persisted in `localStorage` (speed, direction, angles, zoom, point size)
 - **Dark theme** with a near-black scene background

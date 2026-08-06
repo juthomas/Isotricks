@@ -3,11 +3,11 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ControlPanel from "@/components/ControlPanel";
-import { DEMO_LIST } from "@/lib/demos";
+import { DEMO_LIST, getDemo } from "@/lib/demos";
 import { demoObjectKey, fileObjectKey } from "@/lib/storage";
 import { useLoadedObject } from "@/hooks/useLoadedObject";
 import { useModelSettings } from "@/hooks/useModelSettings";
-import type { DemoId, ObjectSource } from "@/lib/types";
+import { DEFAULT_DEMO_ID, type DemoId, type ObjectSource } from "@/lib/types";
 
 const IsoViewer = dynamic(() => import("@/components/IsoViewer"), {
   ssr: false,
@@ -19,7 +19,7 @@ const IsoViewer = dynamic(() => import("@/components/IsoViewer"), {
 });
 
 function defaultSource(): ObjectSource {
-  const demo = DEMO_LIST[0];
+  const demo = getDemo(DEFAULT_DEMO_ID);
   return { kind: "demo", id: demo.id, label: demo.label };
 }
 

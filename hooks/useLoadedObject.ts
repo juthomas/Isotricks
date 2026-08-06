@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import * as THREE from "three";
-import { createDemoObject } from "@/lib/demos";
+import { createDemoObject, getDemo } from "@/lib/demos";
 import { loadModelFromUrl } from "@/lib/loaders";
 import type { ObjectSource } from "@/lib/types";
 
@@ -35,10 +35,19 @@ export function useLoadedObject(source: ObjectSource): LoadState {
 
     async function run() {
       try {
-        const object =
-          source.kind === "demo"
-            ? createDemoObject(source.id)
-            : await loadModelFromUrl(source.url, source.fileName);
+        let object: THREE.Object3D;
+
+        if (source.kind === "demo") {
+          const demo = getDemo(source.id);
+          if (demo.assetUrl && demo.assetFileName) {
+            object = await loadModelFromUrl(demo.assetUrl, demo.assetFileName);
+          } else {
+            object = createDemoObject(source.id);
+          }
+        } else {
+          object = await loadModelFromUrl(source.url, source.fileName);
+        }
+
         if (!cancelled) {
           setState({ status: "ready", object, error: null });
         }
