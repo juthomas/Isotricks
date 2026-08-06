@@ -2,7 +2,7 @@
   "name": "iso_tricks",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@9.6.0",
+  "packageManager": "pnpm@10.12.4",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -28,5 +28,11 @@
     "eslint-config-next": "16.3.0",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "sharp",
+      "unrs-resolver"
+    ]
   }
 }
