@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState } from "react";
 import DemoPicker from "./DemoPicker";
 import FileUpload from "./FileUpload";
 import VideoExportPanel from "./VideoExportPanel";
@@ -11,6 +12,7 @@ import type {
   RotationDirection,
 } from "@/lib/types";
 import { GLITCH_EFFECTS } from "@/lib/types";
+import { downloadSettingsFile, readSettingsFile } from "@/lib/settingsIO";
 import type { UserModelMeta } from "@/lib/userModels";
 import type { VideoExportControls } from "@/hooks/useVideoExport";
 
@@ -309,6 +311,25 @@ export default function ControlPanel({
   const activeSavedId = source.kind === "file" ? source.id : null;
   const nearLabel = settings.invertDepthColors ? "Far" : "Near";
   const farLabel = settings.invertDepthColors ? "Near" : "Far";
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [settingsIoMessage, setSettingsIoMessage] = useState<string | null>(
+    null,
+  );
+
+  const handleImportSettings = async (file: File | null) => {
+    if (!file) return;
+    try {
+      const imported = await readSettingsFile(file);
+      onSettingsChange(imported);
+      setSettingsIoMessage("Settings imported");
+    } catch (err) {
+      setSettingsIoMessage(
+        err instanceof Error ? err.message : "Failed to import settings",
+      );
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  };
 
   return (
     <>
@@ -646,7 +667,38 @@ export default function ControlPanel({
           <VideoExportPanel settings={settings} exportControls={videoExport} />
         </div>
 
-        <div className="border-t border-zinc-800/80 p-4">
+        <div className="space-y-2 border-t border-zinc-800/80 p-4">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                downloadSettingsFile(settings);
+                setSettingsIoMessage("Settings exported");
+              }}
+              className="flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-200 ring-1 ring-zinc-700 transition-colors hover:bg-zinc-700"
+            >
+              Export settings
+            </button>
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              className="flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-200 ring-1 ring-zinc-700 transition-colors hover:bg-zinc-700"
+            >
+              Import settings
+            </button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) =>
+                void handleImportSettings(e.target.files?.[0] ?? null)
+              }
+            />
+          </div>
+          {settingsIoMessage && (
+            <p className="text-[10px] text-zinc-500">{settingsIoMessage}</p>
+          )}
           <button
             type="button"
             onClick={onResetSettings}
