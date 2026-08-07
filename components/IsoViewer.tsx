@@ -7,6 +7,7 @@ import * as THREE from "three";
 import LoadedModel from "./LoadedModel";
 import type { ModelSettings } from "@/lib/types";
 import type { ExportModelSource } from "@/lib/exportScene";
+import { captureOrthoCameraState } from "@/lib/exportScene";
 
 type IsoViewerProps = {
   object: THREE.Object3D | null;
@@ -189,6 +190,7 @@ function ExportBridge({
   modelRootRef: MutableRefObject<THREE.Object3D | null>;
   onExportReady?: (getSource: (() => ExportModelSource | null) | null) => void;
 }) {
+  const { camera } = useThree();
   const settingsRef = useRef(settings);
   useEffect(() => {
     settingsRef.current = settings;
@@ -199,6 +201,8 @@ function ExportBridge({
     onExportReady(() => {
       const modelRoot = modelRootRef.current;
       if (!modelRoot) return null;
+      if (!(camera instanceof THREE.OrthographicCamera)) return null;
+      camera.updateMatrixWorld(true);
       const s = settingsRef.current;
       return {
         modelRoot,
@@ -207,15 +211,13 @@ function ExportBridge({
               .depthUniforms as ExportModelSource["depthUniforms"]) ?? null)
           : null,
         invertDepthColors: s.invertDepthColors,
-        angleX: s.angleX,
-        angleY: s.angleY,
-        zoom: s.zoom,
+        camera: captureOrthoCameraState(camera),
         rotationDirection: s.rotationDirection,
         displayMode: s.displayMode,
       };
     });
     return () => onExportReady(null);
-  }, [onExportReady, modelRootRef]);
+  }, [onExportReady, modelRootRef, camera]);
 
   return null;
 }
@@ -353,7 +355,7 @@ export default function IsoViewer({
       </div>
 
       {recording && (
-        <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-lg bg-red-950/80 px-3 py-1.5 text-xs font-medium text-red-100 ring-1 ring-red-800">
+        <div className="pointer-events-none absolute right-3 top-3 z-20 rounded-lg bg-amber-950/85 px-3 py-1.5 text-xs font-medium text-amber-100 ring-1 ring-amber-700/80">
           Exporting…
         </div>
       )}

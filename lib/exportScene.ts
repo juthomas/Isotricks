@@ -1,5 +1,16 @@
 import * as THREE from "three";
 
+export type ExportCameraState = {
+  position: THREE.Vector3;
+  quaternion: THREE.Quaternion;
+  up: THREE.Vector3;
+  zoom: number;
+  /** Vertical half-extent of the ortho frustum (before zoom). */
+  halfHeight: number;
+  near: number;
+  far: number;
+};
+
 export type ExportModelSource = {
   /** Live model root (materials already applied by LoadedModel). */
   modelRoot: THREE.Object3D;
@@ -9,9 +20,8 @@ export type ExportModelSource = {
     uInvertDepth: { value: number };
   } | null;
   invertDepthColors: boolean;
-  angleX: number;
-  angleY: number;
-  zoom: number;
+  /** Live camera pose (includes orbit), not just settings sliders. */
+  camera: ExportCameraState;
   rotationDirection: 1 | -1 | 0;
   displayMode: "wireframe" | "points" | "solid";
 };
@@ -54,31 +64,46 @@ export function cloneHierarchyShareMaterials(
   return clone;
 }
 
-export function applyIsoCameraPose(
+export function captureOrthoCameraState(
+  camera: THREE.OrthographicCamera,
+): ExportCameraState {
+  const halfHeight = Math.max(
+    1e-6,
+    Math.abs(camera.top - camera.bottom) / 2,
+  );
+  return {
+    position: camera.position.clone(),
+    quaternion: camera.quaternion.clone(),
+    up: camera.up.clone(),
+    zoom: camera.zoom,
+    halfHeight,
+    near: camera.near,
+    far: camera.far,
+  };
+}
+
+/** Apply live camera orientation; rebuild frustum for the export aspect ratio. */
+export function applyExportCameraPose(
   camera: THREE.OrthographicCamera,
   width: number,
   height: number,
-  angleX: number,
-  angleY: number,
-  zoom: number,
+  state: ExportCameraState,
 ): void {
   const w = Math.max(width, 1);
   const h = Math.max(height, 1);
   const aspect = w / h;
-  const frustum = 2.5 / Math.max(zoom, 0.05);
+  const halfH = state.halfHeight;
 
-  camera.left = -frustum * aspect;
-  camera.right = frustum * aspect;
-  camera.top = frustum;
-  camera.bottom = -frustum;
-  camera.near = -100;
-  camera.far = 100;
-
-  const distance = 5;
-  const phi = THREE.MathUtils.degToRad(90 - angleX);
-  const theta = THREE.MathUtils.degToRad(angleY);
-  camera.position.setFromSpherical(new THREE.Spherical(distance, phi, theta));
-  camera.lookAt(0, 0, 0);
+  camera.position.copy(state.position);
+  camera.quaternion.copy(state.quaternion);
+  camera.up.copy(state.up);
+  camera.zoom = state.zoom;
+  camera.left = -halfH * aspect;
+  camera.right = halfH * aspect;
+  camera.top = halfH;
+  camera.bottom = -halfH;
+  camera.near = state.near;
+  camera.far = state.far;
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld(true);
 }

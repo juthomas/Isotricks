@@ -1,7 +1,7 @@
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
 import * as THREE from "three";
 import {
-  applyIsoCameraPose,
+  applyExportCameraPose,
   buildExportScene,
   updateExportDepthUniforms,
   type ExportModelSource,
@@ -281,14 +281,7 @@ export async function exportOfflineMp4(
   videoEncoder.configure(videoConfig);
 
   const { scene, root, camera } = buildExportScene(source);
-  applyIsoCameraPose(
-    camera,
-    width,
-    height,
-    source.angleX,
-    source.angleY,
-    source.zoom,
-  );
+  applyExportCameraPose(camera, width, height, source.camera);
 
   const canvas = document.createElement("canvas");
   canvas.width = width;

@@ -1,7 +1,6 @@
-"use client";
-
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
+  clampExportSize,
   computeExportTiming,
   formatDuration,
   type SyncMode,
@@ -46,6 +45,34 @@ export default function VideoExportPanel({
     startExport,
     cancelExport,
   } = exportControls;
+
+  // Free typing while focused; clamp only on blur / Enter
+  const [widthDraft, setWidthDraft] = useState(String(width));
+  const [heightDraft, setHeightDraft] = useState(String(height));
+  const [widthFocused, setWidthFocused] = useState(false);
+  const [heightFocused, setHeightFocused] = useState(false);
+
+  const commitWidth = () => {
+    const parsed = Number.parseInt(widthDraft, 10);
+    if (Number.isFinite(parsed)) {
+      const next = clampExportSize(parsed);
+      setWidth(next);
+      setWidthDraft(String(next));
+    } else {
+      setWidthDraft(String(width));
+    }
+  };
+
+  const commitHeight = () => {
+    const parsed = Number.parseInt(heightDraft, 10);
+    if (Number.isFinite(parsed)) {
+      const next = clampExportSize(parsed);
+      setHeight(next);
+      setHeightDraft(String(next));
+    } else {
+      setHeightDraft(String(height));
+    }
+  };
 
   const timing = useMemo(
     () =>
@@ -109,6 +136,8 @@ export default function VideoExportPanel({
                 onClick={() => {
                   setWidth(preset.width);
                   setHeight(preset.height);
+                  setWidthDraft(String(preset.width));
+                  setHeightDraft(String(preset.height));
                 }}
                 className={`flex-1 rounded-md px-1.5 py-1.5 text-[10px] font-medium transition-colors disabled:opacity-50 ${
                   active
@@ -125,26 +154,54 @@ export default function VideoExportPanel({
           <label className="space-y-1">
             <span className="text-[10px] text-zinc-500">Width px</span>
             <input
-              type="number"
-              min={256}
-              max={3840}
-              step={2}
-              value={width}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={widthFocused ? widthDraft : String(width)}
               disabled={recording}
-              onChange={(e) => setWidth(Number(e.target.value))}
+              onFocus={() => {
+                setWidthFocused(true);
+                setWidthDraft(String(width));
+              }}
+              onChange={(e) =>
+                setWidthDraft(e.target.value.replace(/[^\d]/g, ""))
+              }
+              onBlur={() => {
+                commitWidth();
+                setWidthFocused(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
               className="w-full rounded-md bg-zinc-900 px-2 py-1.5 font-mono text-xs text-zinc-200 ring-1 ring-zinc-700 outline-none focus:ring-indigo-500 disabled:opacity-50"
             />
           </label>
           <label className="space-y-1">
             <span className="text-[10px] text-zinc-500">Height px</span>
             <input
-              type="number"
-              min={256}
-              max={3840}
-              step={2}
-              value={height}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={heightFocused ? heightDraft : String(height)}
               disabled={recording}
-              onChange={(e) => setHeight(Number(e.target.value))}
+              onFocus={() => {
+                setHeightFocused(true);
+                setHeightDraft(String(height));
+              }}
+              onChange={(e) =>
+                setHeightDraft(e.target.value.replace(/[^\d]/g, ""))
+              }
+              onBlur={() => {
+                commitHeight();
+                setHeightFocused(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
               className="w-full rounded-md bg-zinc-900 px-2 py-1.5 font-mono text-xs text-zinc-200 ring-1 ring-zinc-700 outline-none focus:ring-indigo-500 disabled:opacity-50"
             />
           </label>
