@@ -60,3 +60,148 @@ input[type="range"]::-webkit-slider-thumb {
   background: #6366f1;
   cursor: pointer;
 }
+
+/* —— Export progress overlay —— */
+.export-overlay__veil {
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 45%, transparent 0%, rgba(0, 0, 0, 0.72) 100%),
+    rgba(0, 0, 0, 0.45);
+  animation: export-veil-in 280ms ease-out both;
+}
+
+.export-overlay__scan {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 2px,
+    rgba(99, 102, 241, 0.03) 2px,
+    rgba(99, 102, 241, 0.03) 4px
+  );
+  mask-image: linear-gradient(180deg, transparent, #000 20%, #000 80%, transparent);
+  animation: export-scan 2.4s linear infinite;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.export-overlay__ring {
+  border: 1px solid rgba(113, 113, 122, 0.35);
+  transform: rotate(45deg) scale(0.72);
+  animation: export-ring-pulse 2.8s ease-in-out infinite;
+}
+
+.export-overlay__arc {
+  transition: stroke-dasharray 160ms linear;
+  filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.45));
+}
+
+.export-overlay__pct {
+  animation: export-pct-glitch 3.2s steps(1) infinite;
+}
+
+.export-overlay__label {
+  animation: export-label-flicker 2.6s ease-in-out infinite;
+}
+
+.export-overlay__tick {
+  animation: export-tick 1.8s ease-in-out infinite;
+}
+
+.export-overlay__tick:nth-child(odd) {
+  animation-delay: 0.35s;
+}
+
+.export-overlay__bar-fill {
+  background-size: 200% 100%;
+  animation: export-bar-sheen 1.4s linear infinite;
+  transition: width 160ms linear;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.55);
+}
+
+@keyframes export-veil-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes export-scan {
+  from {
+    transform: translateY(-8%);
+  }
+  to {
+    transform: translateY(8%);
+  }
+}
+
+@keyframes export-ring-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: rotate(45deg) scale(0.72);
+  }
+  50% {
+    opacity: 0.7;
+    transform: rotate(45deg) scale(0.78);
+  }
+}
+
+@keyframes export-pct-glitch {
+  0%,
+  92%,
+  100% {
+    transform: translate(0, 0);
+    text-shadow: none;
+  }
+  93% {
+    transform: translate(-2px, 1px);
+    text-shadow: 2px 0 #6366f1, -2px 0 #f43f5e;
+  }
+  94% {
+    transform: translate(2px, -1px);
+    text-shadow: -2px 0 #6366f1, 2px 0 #f43f5e;
+  }
+  95% {
+    transform: translate(0, 0);
+    text-shadow: none;
+  }
+}
+
+@keyframes export-label-flicker {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  40% {
+    opacity: 1;
+  }
+  42% {
+    opacity: 0.45;
+  }
+  44% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes export-tick {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes export-bar-sheen {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}

@@ -34,6 +34,7 @@ export default function VideoExportPanel({
     audioOffsetSec,
     audioDurationSec,
     audioLabel,
+    previewFrame,
     recording,
     progress,
     error,
@@ -44,7 +45,9 @@ export default function VideoExportPanel({
     setSyncMode,
     setAudioOffsetSec,
     setAudioFile,
+    setPreviewFrame,
     startExport,
+    exportPhoto,
     cancelExport,
   } = exportControls;
 
@@ -100,7 +103,7 @@ export default function VideoExportPanel({
   return (
     <div className="space-y-3">
       <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-        Export video
+        Export
       </h2>
 
       <label className="block space-y-1.5">
@@ -208,6 +211,18 @@ export default function VideoExportPanel({
             />
           </label>
         </div>
+        <label className="flex cursor-pointer items-center gap-2 pt-1">
+          <input
+            type="checkbox"
+            checked={previewFrame}
+            disabled={recording}
+            onChange={(e) => setPreviewFrame(e.target.checked)}
+            className="size-3.5 rounded border-zinc-600 bg-zinc-900 accent-indigo-500 disabled:opacity-50"
+          />
+          <span className="text-xs text-zinc-400">
+            Preview export frame
+          </span>
+        </label>
       </div>
 
       <div className="rounded-lg bg-zinc-900/60 px-3 py-2 text-xs ring-1 ring-zinc-800">
@@ -317,25 +332,38 @@ export default function VideoExportPanel({
       )}
 
       {recording && (
-        <div className="space-y-1">
-          <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
+        <div className="space-y-2 rounded-lg bg-zinc-900/80 px-3 py-2.5 ring-1 ring-indigo-500/30">
+          <div className="flex items-center justify-between gap-2">
+            <span className="export-overlay__label text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-300/90">
+              {status ?? "Exporting…"}
+            </span>
+            <span className="font-mono text-xs tabular-nums text-zinc-200">
+              {Math.round(progress * 100)}%
+            </span>
+          </div>
+          <div className="export-overlay__bar h-1 overflow-hidden rounded-full bg-zinc-800">
             <div
-              className="h-full bg-indigo-500 transition-[width] duration-150"
+              className="export-overlay__bar-fill h-full rounded-full bg-gradient-to-r from-indigo-500 via-indigo-300 to-indigo-500"
               style={{ width: `${Math.round(progress * 100)}%` }}
             />
           </div>
-          <p className="text-[11px] text-zinc-500">
-            {Math.round(progress * 100)}%
-          </p>
         </div>
       )}
 
       {error && <p className="text-xs text-red-400">{error}</p>}
-      {status && !error && (
+      {status && !error && !recording && (
         <p className="text-xs text-zinc-500">{status}</p>
       )}
 
       <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={recording}
+          onClick={() => void exportPhoto()}
+          className="flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-200 ring-1 ring-zinc-700 transition-colors hover:bg-zinc-700 disabled:opacity-50"
+        >
+          Export photo
+        </button>
         {!recording ? (
           <button
             type="button"

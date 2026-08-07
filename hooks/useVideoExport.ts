@@ -8,7 +8,9 @@ import {
   DEFAULT_EXPORT_HEIGHT,
   DEFAULT_EXPORT_WIDTH,
   downloadMp4,
+  downloadPng,
   exportOfflineMp4,
+  exportOfflinePng,
   sliceAudioBuffer,
   type SyncMode,
 } from "@/lib/videoExport";
@@ -24,6 +26,7 @@ export type VideoExportControls = {
   audioFile: File | null;
   audioDurationSec: number | null;
   audioLabel: string | null;
+  previewFrame: boolean;
   recording: boolean;
   progress: number;
   error: string | null;
@@ -34,7 +37,9 @@ export type VideoExportControls = {
   setSyncMode: (m: SyncMode) => void;
   setAudioOffsetSec: (n: number) => void;
   setAudioFile: (file: File | null) => Promise<void>;
+  setPreviewFrame: (on: boolean) => void;
   startExport: () => Promise<void>;
+  exportPhoto: () => Promise<void>;
   cancelExport: () => void;
 };
 
@@ -42,6 +47,14 @@ type UseVideoExportArgs = {
   settings: ModelSettings;
   getExportSource: () => ExportModelSource | null;
 };
+
+function waitForPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
 
 export function useVideoExport({
   settings,
@@ -55,6 +68,7 @@ export function useVideoExport({
   const [audioFile, setAudioFileState] = useState<File | null>(null);
   const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
   const [audioDurationSec, setAudioDurationSec] = useState<number | null>(null);
+  const [previewFrame, setPreviewFrame] = useState(false);
   const [recording, setRecording] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -137,9 +151,27 @@ export function useVideoExport({
     setRecording(true);
     setStatus("Exporting MP4…");
 
+    // Wait for React commit so live useFrame pauses (shared glitch uniforms)
+    await waitForPaint();
+
+    if (abort.signal.aborted) {
+      setRecording(false);
+      abortRef.current = null;
+      setStatus("Export cancelled");
+      return;
+    }
+
+    const readySource = getExportSource();
+    if (!readySource) {
+      setRecording(false);
+      abortRef.current = null;
+      setError("Model is not ready for export");
+      return;
+    }
+
     try {
       const blob = await exportOfflineMp4({
-        source,
+        source: readySource,
         width,
         height,
         revolutions,
@@ -174,6 +206,44 @@ export function useVideoExport({
     height,
   ]);
 
+  const exportPhoto = useCallback(async () => {
+    if (recording) return;
+    setError(null);
+    setStatus(null);
+    setProgress(0);
+
+    if (!getExportSource()) {
+      setError("Model is not ready for export");
+      return;
+    }
+
+    setRecording(true);
+    setStatus("Exporting PNG…");
+    await waitForPaint();
+
+    const readySource = getExportSource();
+    if (!readySource) {
+      setRecording(false);
+      setError("Model is not ready for export");
+      return;
+    }
+
+    try {
+      const blob = await exportOfflinePng({
+        source: readySource,
+        width,
+        height,
+      });
+      downloadPng(blob, width, height);
+      setStatus("Saved PNG");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Photo export failed");
+    } finally {
+      setRecording(false);
+      setProgress(0);
+    }
+  }, [recording, getExportSource, width, height]);
+
   return {
     revolutions,
     width,
@@ -183,6 +253,7 @@ export function useVideoExport({
     audioFile,
     audioDurationSec,
     audioLabel: audioFile?.name ?? null,
+    previewFrame,
     recording,
     progress,
     error,
@@ -193,7 +264,9 @@ export function useVideoExport({
     setSyncMode,
     setAudioOffsetSec,
     setAudioFile,
+    setPreviewFrame,
     startExport,
+    exportPhoto,
     cancelExport,
   };
 }

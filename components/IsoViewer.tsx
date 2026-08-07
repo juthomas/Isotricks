@@ -5,6 +5,7 @@ import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, OrthographicCamera } from "@react-three/drei";
 import * as THREE from "three";
 import LoadedModel from "./LoadedModel";
+import ExportProgressOverlay from "./ExportProgressOverlay";
 import type { ModelSettings } from "@/lib/types";
 import type { ExportModelSource } from "@/lib/exportScene";
 import { captureOrthoCameraState } from "@/lib/exportScene";
@@ -17,6 +18,12 @@ type IsoViewerProps = {
   /** When false, orbit stays mounted but ignores input (keeps camera pose). */
   orbitInteractive?: boolean;
   recording?: boolean;
+  exportProgress?: number;
+  exportStatus?: string | null;
+  /** Letterbox live view to export aspect with a red frame. */
+  previewFrame?: boolean;
+  exportWidth?: number;
+  exportHeight?: number;
   onExportReady?: (getSource: (() => ExportModelSource | null) | null) => void;
 };
 
@@ -265,6 +272,11 @@ export default function IsoViewer({
   error = null,
   orbitInteractive = true,
   recording = false,
+  exportProgress = 0,
+  exportStatus = null,
+  previewFrame = false,
+  exportWidth = 1080,
+  exportHeight = 1080,
   onExportReady,
 }: IsoViewerProps) {
   const [showLoading, setShowLoading] = useState(false);
@@ -278,6 +290,10 @@ export default function IsoViewer({
   const onModelRoot = useCallback((root: THREE.Object3D | null) => {
     modelRootRef.current = root;
   }, []);
+
+  const showExportPreview = previewFrame && !recording;
+  const safeW = Math.max(1, exportWidth);
+  const safeH = Math.max(1, exportHeight);
 
   // Hide loading indicator immediately when load ends (render-phase adjust)
   if (!loading && showLoading) {
@@ -348,52 +364,74 @@ export default function IsoViewer({
   return (
     <div className="relative h-full w-full bg-black">
       <div
-        className="h-full w-full"
+        className="flex h-full w-full items-center justify-center [container-type:size]"
         style={{
           opacity: fadeOpacity,
           transition: `opacity ${FADE_MS}ms ease`,
         }}
       >
-        <Canvas
-          dpr={[1, 2]}
-          gl={{ antialias: true, alpha: false }}
-          onCreated={({ gl }) => {
-            gl.setClearColor("#000000", 1);
-          }}
+        <div
+          className={
+            showExportPreview
+              ? "relative outline outline-2 outline-[#ef4444] outline-offset-0"
+              : "h-full w-full"
+          }
+          style={
+            showExportPreview
+              ? {
+                  aspectRatio: `${safeW} / ${safeH}`,
+                  // Keep ≥12px margin so the red frame stays visible on all sides
+                  width: `min(calc(100cqw - 24px), calc((100cqh - 24px) * ${safeW} / ${safeH}))`,
+                  height: `min(calc(100cqh - 24px), calc((100cqw - 24px) * ${safeH} / ${safeW}))`,
+                }
+              : undefined
+          }
         >
-          <ExportBridge
-            settings={settings}
-            modelRootRef={modelRootRef}
-            onExportReady={onExportReady}
-          />
-          <ambientLight
-            intensity={settings.displayMode === "solid" ? 0.85 : 1}
-          />
-          {settings.displayMode === "solid" && (
-            <directionalLight position={[4, 6, 2]} intensity={0.45} />
-          )}
-          <IsoCamera
-            angleX={settings.angleX}
-            angleY={settings.angleY}
-            zoom={settings.zoom}
-          />
-          {displayObject && (
-            <LoadedModel
-              object={displayObject}
+          <Canvas
+            className="h-full w-full"
+            frameloop={recording ? "never" : "always"}
+            dpr={[1, 2]}
+            gl={{ antialias: true, alpha: false }}
+            onCreated={({ gl }) => {
+              gl.setClearColor("#000000", 1);
+            }}
+          >
+            <ExportBridge
               settings={settings}
-              onExportRoot={onModelRoot}
+              modelRootRef={modelRootRef}
+              onExportReady={onExportReady}
             />
-          )}
-          {settings.orbitEnabled && (
-            <SafeOrbitControls enabled={orbitInteractive && !recording} />
-          )}
-        </Canvas>
+            <ambientLight
+              intensity={settings.displayMode === "solid" ? 0.85 : 1}
+            />
+            {settings.displayMode === "solid" && (
+              <directionalLight position={[4, 6, 2]} intensity={0.45} />
+            )}
+            <IsoCamera
+              angleX={settings.angleX}
+              angleY={settings.angleY}
+              zoom={settings.zoom}
+            />
+            {displayObject && (
+              <LoadedModel
+                object={displayObject}
+                settings={settings}
+                recording={recording}
+                onExportRoot={onModelRoot}
+              />
+            )}
+            {settings.orbitEnabled && (
+              <SafeOrbitControls enabled={orbitInteractive && !recording} />
+            )}
+          </Canvas>
+        </div>
       </div>
 
       {recording && (
-        <div className="pointer-events-none absolute right-3 top-3 z-20 rounded-lg bg-amber-950/85 px-3 py-1.5 text-xs font-medium text-amber-100 ring-1 ring-amber-700/80">
-          Exporting…
-        </div>
+        <ExportProgressOverlay
+          progress={exportProgress}
+          status={exportStatus}
+        />
       )}
 
       {showLoading && !recording && (

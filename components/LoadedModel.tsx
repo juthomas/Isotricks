@@ -28,6 +28,8 @@ const OVERLAP_BLENDING = {
 type LoadedModelProps = {
   object: THREE.Object3D;
   settings: ModelSettings;
+  /** When true, skip useFrame updates so offline export owns time/rotation. */
+  recording?: boolean;
   onExportRoot?: (root: THREE.Object3D | null) => void;
 };
 
@@ -680,6 +682,7 @@ function applyDisplayMode(
 export default function LoadedModel({
   object,
   settings,
+  recording = false,
   onExportRoot,
 }: LoadedModelProps) {
   const groupRef = useRef<THREE.Group>(null);
@@ -731,7 +734,7 @@ export default function LoadedModel({
   ]);
 
   useFrame((state, delta) => {
-    if (!groupRef.current) return;
+    if (recording || !groupRef.current) return;
 
     if (settings.autoRotate && settings.rotationDirection !== 0) {
       groupRef.current.rotation.y +=

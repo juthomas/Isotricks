@@ -296,6 +296,8 @@ export type OfflineExportOptions = {
 
 /**
  * Offline frame-by-frame render at fixed resolution → MP4 (H.264 + optional AAC).
+ * Uses a dedicated offscreen WebGLRenderer so the live canvas keeps running
+ * independently, with the same sRGB color management as the on-screen view.
  */
 export async function exportOfflineMp4(
   options: OfflineExportOptions,
@@ -354,8 +356,11 @@ export async function exportOfflineMp4(
     preserveDrawingBuffer: true,
     powerPreference: "high-performance",
   });
-  renderer.setSize(width, height, false);
+  // Match R3F live view color management (setter also sets drawingBufferColorSpace)
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.NoToneMapping;
   renderer.setPixelRatio(1);
+  renderer.setSize(width, height, false);
   renderer.setClearColor(0x000000, 1);
 
   const direction =
@@ -392,12 +397,13 @@ export async function exportOfflineMp4(
 
       renderer.render(scene, camera);
 
-      await waitForEncodeQueue(videoEncoder, 4, signal);
-
+      // Capture before any await — drawing buffer must still be intact
       const frame = new VideoFrame(canvas, {
         timestamp: i * frameDurationUs,
         duration: frameDurationUs,
       });
+
+      await waitForEncodeQueue(videoEncoder, 4, signal);
       videoEncoder.encode(frame, { keyFrame: i % EXPORT_FPS === 0 });
       frame.close();
 
@@ -433,4 +439,75 @@ export async function exportOfflineMp4(
 
 export function downloadMp4(blob: Blob, revolutions: number): void {
   downloadBlob(blob, `iso-tricks-${revolutions}rev.mp4`);
+}
+
+export function downloadPng(blob: Blob, width: number, height: number): void {
+  downloadBlob(blob, `iso-tricks-${width}x${height}.png`);
+}
+
+/**
+ * Single-frame offline PNG at export resolution (same path as video frames).
+ */
+export async function exportOfflinePng(options: {
+  source: ExportModelSource;
+  width: number;
+  height: number;
+}): Promise<Blob> {
+  const width = clampExportSize(options.width);
+  const height = clampExportSize(options.height);
+  const { source } = options;
+
+  if (!source.modelRoot) {
+    throw new Error("Model is not ready for export");
+  }
+
+  const { scene, root, camera } = buildExportScene(source);
+  applyExportCameraPose(camera, width, height, source.camera);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: true,
+    alpha: false,
+    preserveDrawingBuffer: true,
+    powerPreference: "high-performance",
+  });
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.setPixelRatio(1);
+  renderer.setSize(width, height, false);
+  renderer.setClearColor(0x000000, 1);
+
+  try {
+    if (source.depthUniforms) {
+      updateExportDepthUniforms(
+        root,
+        camera,
+        source.depthUniforms,
+        source.invertDepthColors,
+      );
+    }
+
+    if (source.glitchUniforms && source.glitchSettings) {
+      syncGlitchUniforms(source.glitchUniforms, source.glitchSettings, 0);
+    }
+
+    renderer.render(scene, camera);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => {
+          if (result) resolve(result);
+          else reject(new Error("Failed to encode PNG"));
+        },
+        "image/png",
+      );
+    });
+    return blob;
+  } finally {
+    renderer.dispose();
+    scene.clear();
+  }
 }

@@ -360,6 +360,11 @@ export default function HomeClient() {
           settings={settings}
           orbitInteractive={!immersive && !videoExport.recording}
           recording={videoExport.recording}
+          exportProgress={videoExport.progress}
+          exportStatus={videoExport.status}
+          previewFrame={videoExport.previewFrame}
+          exportWidth={videoExport.width}
+          exportHeight={videoExport.height}
           onExportReady={onExportReady}
           loading={loadState.status === "loading"}
           error={immersive ? null : loadState.error}

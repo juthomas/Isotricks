@@ -55,7 +55,7 @@ export type ExportModelSource = {
   glitchUniforms: GlitchRuntimeUniforms | null;
   glitchSettings: ExportGlitchSettings | null;
   invertDepthColors: boolean;
-  /** Live camera pose (includes orbit), not just settings sliders. */
+  /** Live camera pose snapshot (includes orbit), not just settings sliders. */
   camera: ExportCameraState;
   rotationDirection: 1 | -1 | 0;
   displayMode: "wireframe" | "points" | "solid";
