@@ -2,6 +2,7 @@
 
 import DemoPicker from "./DemoPicker";
 import FileUpload from "./FileUpload";
+import VideoExportPanel from "./VideoExportPanel";
 import type {
   DemoId,
   DisplayMode,
@@ -10,12 +11,14 @@ import type {
   RotationDirection,
 } from "@/lib/types";
 import type { UserModelMeta } from "@/lib/userModels";
+import type { VideoExportControls } from "@/hooks/useVideoExport";
 
 type ControlPanelProps = {
   source: ObjectSource;
   settings: ModelSettings;
   panelOpen: boolean;
   savedModels: UserModelMeta[];
+  videoExport: VideoExportControls;
   onTogglePanel: () => void;
   onSelectDemo: (id: DemoId) => void;
   onFile: (file: File) => void;
@@ -97,6 +100,7 @@ export default function ControlPanel({
   settings,
   panelOpen,
   savedModels,
+  videoExport,
   onTogglePanel,
   onSelectDemo,
   onFile,
@@ -387,6 +391,8 @@ export default function ControlPanel({
               />
             </label>
           </div>
+
+          <VideoExportPanel settings={settings} exportControls={videoExport} />
         </div>
 
         <div className="border-t border-zinc-800/80 p-4">

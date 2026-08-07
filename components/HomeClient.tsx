@@ -12,7 +12,9 @@ import {
 } from "@/lib/storage";
 import { useLoadedObject } from "@/hooks/useLoadedObject";
 import { useModelSettings } from "@/hooks/useModelSettings";
+import { useVideoExport } from "@/hooks/useVideoExport";
 import { DEFAULT_DEMO_ID, type DemoId, type ObjectSource } from "@/lib/types";
+import type { ExportModelSource } from "@/lib/exportScene";
 import {
   deleteUserModel,
   getUserModelBlob,
@@ -96,6 +98,19 @@ export default function HomeClient() {
 
   const { settings, setSettings, resetSettings } = useModelSettings(objectKey);
   const loadState = useLoadedObject(source);
+  const exportSourceRef = useRef<(() => ExportModelSource | null) | null>(null);
+
+  const onExportReady = useCallback(
+    (getSource: (() => ExportModelSource | null) | null) => {
+      exportSourceRef.current = getSource;
+    },
+    [],
+  );
+
+  const videoExport = useVideoExport({
+    settings,
+    getExportSource: () => exportSourceRef.current?.() ?? null,
+  });
 
   useEffect(() => {
     return () => {
@@ -343,13 +358,15 @@ export default function HomeClient() {
         <IsoViewer
           object={loadState.object}
           settings={settings}
-          orbitInteractive={!immersive}
+          orbitInteractive={!immersive && !videoExport.recording}
+          recording={videoExport.recording}
+          onExportReady={onExportReady}
           loading={loadState.status === "loading"}
           error={immersive ? null : loadState.error}
         />
       </div>
 
-      {immersive && (
+      {immersive && !videoExport.recording && (
         <button
           type="button"
           aria-label="Exit fullscreen"
@@ -392,6 +409,7 @@ export default function HomeClient() {
           settings={settings}
           panelOpen={panelOpen}
           savedModels={savedModels}
+          videoExport={videoExport}
           onTogglePanel={() => setPanelOverride(!panelOpen)}
           onSelectDemo={onSelectDemo}
           onFile={onFile}

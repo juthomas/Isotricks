@@ -23,6 +23,7 @@ const OVERLAP_BLENDING = {
 type LoadedModelProps = {
   object: THREE.Object3D;
   settings: ModelSettings;
+  onExportRoot?: (root: THREE.Object3D | null) => void;
 };
 
 type DepthUniforms = {
@@ -317,7 +318,11 @@ function applyDisplayMode(
   };
 }
 
-export default function LoadedModel({ object, settings }: LoadedModelProps) {
+export default function LoadedModel({
+  object,
+  settings,
+  onExportRoot,
+}: LoadedModelProps) {
   const groupRef = useRef<THREE.Group>(null);
   const { camera } = useThree();
   const depthUniformsRef = useRef(createDepthUniforms());
@@ -327,6 +332,17 @@ export default function LoadedModel({ object, settings }: LoadedModelProps) {
   const viewMatrixRef = useRef(new THREE.Matrix4());
 
   const cloned = useMemo(() => object.clone(true), [object]);
+
+  useEffect(() => {
+    const root = groupRef.current;
+    if (!root) return;
+    root.name = "iso-model-root";
+    root.userData.depthUniforms = settings.depthColors
+      ? depthUniformsRef.current
+      : null;
+    onExportRoot?.(root);
+    return () => onExportRoot?.(null);
+  }, [cloned, settings.depthColors, onExportRoot]);
 
   useEffect(() => {
     const cleanup = applyDisplayMode(

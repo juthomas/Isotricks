@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, type MutableRefObject } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, OrthographicCamera } from "@react-three/drei";
 import * as THREE from "three";
 import LoadedModel from "./LoadedModel";
 import type { ModelSettings } from "@/lib/types";
+import type { ExportModelSource } from "@/lib/exportScene";
 
 type IsoViewerProps = {
   object: THREE.Object3D | null;
@@ -14,6 +15,8 @@ type IsoViewerProps = {
   error?: string | null;
   /** When false, orbit stays mounted but ignores input (keeps camera pose). */
   orbitInteractive?: boolean;
+  recording?: boolean;
+  onExportReady?: (getSource: (() => ExportModelSource | null) | null) => void;
 };
 
 const FADE_MS = 180;
@@ -177,12 +180,54 @@ function SafeOrbitControls({
   );
 }
 
+function ExportBridge({
+  settings,
+  modelRootRef,
+  onExportReady,
+}: {
+  settings: ModelSettings;
+  modelRootRef: MutableRefObject<THREE.Object3D | null>;
+  onExportReady?: (getSource: (() => ExportModelSource | null) | null) => void;
+}) {
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  useEffect(() => {
+    if (!onExportReady) return;
+    onExportReady(() => {
+      const modelRoot = modelRootRef.current;
+      if (!modelRoot) return null;
+      const s = settingsRef.current;
+      return {
+        modelRoot,
+        depthUniforms: s.depthColors
+          ? ((modelRoot.userData
+              .depthUniforms as ExportModelSource["depthUniforms"]) ?? null)
+          : null,
+        invertDepthColors: s.invertDepthColors,
+        angleX: s.angleX,
+        angleY: s.angleY,
+        zoom: s.zoom,
+        rotationDirection: s.rotationDirection,
+        displayMode: s.displayMode,
+      };
+    });
+    return () => onExportReady(null);
+  }, [onExportReady, modelRootRef]);
+
+  return null;
+}
+
 export default function IsoViewer({
   object,
   settings,
   loading = false,
   error = null,
   orbitInteractive = true,
+  recording = false,
+  onExportReady,
 }: IsoViewerProps) {
   const [showLoading, setShowLoading] = useState(false);
   const [displayObject, setDisplayObject] = useState<THREE.Object3D | null>(
@@ -190,6 +235,11 @@ export default function IsoViewer({
   );
   const [fadeOpacity, setFadeOpacity] = useState(0);
   const displayedRef = useRef<THREE.Object3D | null>(null);
+  const modelRootRef = useRef<THREE.Object3D | null>(null);
+
+  const onModelRoot = useCallback((root: THREE.Object3D | null) => {
+    modelRootRef.current = root;
+  }, []);
 
   // Hide loading indicator immediately when load ends (render-phase adjust)
   if (!loading && showLoading) {
@@ -273,6 +323,11 @@ export default function IsoViewer({
             gl.setClearColor("#000000", 1);
           }}
         >
+          <ExportBridge
+            settings={settings}
+            modelRootRef={modelRootRef}
+            onExportReady={onExportReady}
+          />
           <ambientLight
             intensity={settings.displayMode === "solid" ? 0.85 : 1}
           />
@@ -285,15 +340,25 @@ export default function IsoViewer({
             zoom={settings.zoom}
           />
           {displayObject && (
-            <LoadedModel object={displayObject} settings={settings} />
+            <LoadedModel
+              object={displayObject}
+              settings={settings}
+              onExportRoot={onModelRoot}
+            />
           )}
           {settings.orbitEnabled && (
-            <SafeOrbitControls enabled={orbitInteractive} />
+            <SafeOrbitControls enabled={orbitInteractive && !recording} />
           )}
         </Canvas>
       </div>
 
-      {showLoading && (
+      {recording && (
+        <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-lg bg-red-950/80 px-3 py-1.5 text-xs font-medium text-red-100 ring-1 ring-red-800">
+          Exporting…
+        </div>
+      )}
+
+      {showLoading && !recording && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40">
           <p className="text-sm text-zinc-500">Loading model…</p>
         </div>
