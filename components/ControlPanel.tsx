@@ -1,17 +1,23 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import DemoPicker from "./DemoPicker";
 import FileUpload from "./FileUpload";
 import VideoExportPanel from "./VideoExportPanel";
 import type {
+  ColorMode,
   DemoId,
   DisplayMode,
   ModelSettings,
   ObjectSource,
   RotationDirection,
 } from "@/lib/types";
-import { GLITCH_EFFECTS } from "@/lib/types";
+import {
+  COLOR_MODES,
+  GLITCH_EFFECTS,
+  usesDepthColor,
+  usesTextureColor,
+} from "@/lib/types";
 import { downloadSettingsFile, readSettingsFile } from "@/lib/settingsIO";
 import type { UserModelMeta } from "@/lib/userModels";
 import type { VideoExportControls } from "@/hooks/useVideoExport";
@@ -21,13 +27,16 @@ import { SCENE_TIME_LOOP } from "@/hooks/useSceneClock";
 type ControlPanelProps = {
   source: ObjectSource;
   settings: ModelSettings;
+  hasTextures: boolean;
   panelOpen: boolean;
   savedModels: UserModelMeta[];
   videoExport: VideoExportControls;
   sceneClock: SceneClock;
+  importError?: string | null;
+  loadError?: string | null;
   onTogglePanel: () => void;
   onSelectDemo: (id: DemoId) => void;
-  onFile: (file: File) => void;
+  onFiles: (files: File[]) => void;
   onSelectSavedModel: (id: string) => void;
   onDeleteSavedModel: (id: string) => void;
   onSettingsChange: (update: Partial<ModelSettings>) => void;
@@ -222,7 +231,7 @@ function formatGlitchIntensity(intensity: number): string {
 /** Mix cell size: log from 0.001 to 3. */
 const CELL_SIZE_SLIDER_MAX = 1000;
 const CELL_SIZE_LOG_MIN = 0.001;
-const CELL_SIZE_LOG_MAX = 3;
+const CELL_SIZE_LOG_MAX = 20;
 
 function cellSizeToSliderPos(size: number): number {
   const d = Math.min(CELL_SIZE_LOG_MAX, Math.max(CELL_SIZE_LOG_MIN, size));
@@ -247,6 +256,57 @@ function formatCellSize(size: number): string {
 }
 
 /** Effect range + compact inline speed on one block. */
+function ColorModeControl({
+  value,
+  hasTextures,
+  onChange,
+  compact = false,
+}: {
+  value: ColorMode;
+  hasTextures: boolean;
+  onChange: (mode: ColorMode) => void;
+  compact?: boolean;
+}) {
+  const effective = value === "texture" && !hasTextures ? "gray" : value;
+  return (
+    <div
+      className={`flex gap-0.5 rounded-md bg-zinc-900 p-0.5 ring-1 ring-zinc-800 ${
+        compact ? "" : ""
+      }`}
+      role="group"
+      aria-label="Color mode"
+    >
+      {COLOR_MODES.map((mode) => {
+        const disabled = mode.id === "texture" && !hasTextures;
+        return (
+          <button
+            key={mode.id}
+            type="button"
+            disabled={disabled}
+            title={
+              disabled
+                ? "No MTL materials or textures on this model"
+                : mode.label
+            }
+            onClick={() => onChange(mode.id)}
+            className={`flex-1 rounded ${
+              compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1.5 text-xs"
+            } font-medium transition-colors ${
+              disabled
+                ? "cursor-not-allowed text-zinc-600"
+                : effective === mode.id
+                  ? "bg-indigo-600 text-white"
+                  : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            {mode.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function GlitchEffectControls({
   label,
   minValue,
@@ -254,6 +314,10 @@ function GlitchEffectControls({
   onRangeChange,
   speed,
   onSpeedChange,
+  colorMode,
+  hasTextures,
+  onColorModeChange,
+  extra,
 }: {
   label: string;
   minValue: number;
@@ -261,6 +325,10 @@ function GlitchEffectControls({
   onRangeChange: (min: number, max: number) => void;
   speed: number;
   onSpeedChange: (speed: number) => void;
+  colorMode?: ColorMode;
+  hasTextures?: boolean;
+  onColorModeChange?: (mode: ColorMode) => void;
+  extra?: ReactNode;
 }) {
   const minPos = intensityToSliderPos(minValue);
   const maxPos = intensityToSliderPos(maxValue);
@@ -307,6 +375,14 @@ function GlitchEffectControls({
           </span>
         </div>
       </div>
+      {colorMode !== undefined && onColorModeChange && hasTextures !== undefined && (
+        <ColorModeControl
+          value={colorMode}
+          hasTextures={hasTextures}
+          onChange={onColorModeChange}
+          compact
+        />
+      )}
       <div className="relative h-5">
         <div className="pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-zinc-700" />
         <div
@@ -348,6 +424,7 @@ function GlitchEffectControls({
           style={{ zIndex: 3 }}
         />
       </div>
+      {extra}
     </div>
   );
 }
@@ -367,13 +444,16 @@ const DIRECTIONS: { id: RotationDirection; label: string }[] = [
 export default function ControlPanel({
   source,
   settings,
+  hasTextures,
   panelOpen,
   savedModels,
   videoExport,
   sceneClock,
+  importError = null,
+  loadError = null,
   onTogglePanel,
   onSelectDemo,
-  onFile,
+  onFiles,
   onSelectSavedModel,
   onDeleteSavedModel,
   onSettingsChange,
@@ -388,6 +468,32 @@ export default function ControlPanel({
     null,
   );
   const loopPos = sceneClock.sceneTime % SCENE_TIME_LOOP;
+  const showInvertDepth = usesDepthColor(settings);
+  const showTextureLook =
+    hasTextures && usesTextureColor(settings);
+
+  useEffect(() => {
+    if (hasTextures) return;
+    const update: Partial<ModelSettings> = {};
+    if (settings.colorMode === "texture") update.colorMode = "gray";
+    if (settings.glitchMixWireColor === "texture") {
+      update.glitchMixWireColor = "gray";
+    }
+    if (settings.glitchMixPointsColor === "texture") {
+      update.glitchMixPointsColor = "gray";
+    }
+    if (settings.glitchMixSolidColor === "texture") {
+      update.glitchMixSolidColor = "gray";
+    }
+    if (Object.keys(update).length > 0) onSettingsChange(update);
+  }, [
+    hasTextures,
+    settings.colorMode,
+    settings.glitchMixWireColor,
+    settings.glitchMixPointsColor,
+    settings.glitchMixSolidColor,
+    onSettingsChange,
+  ]);
 
   const handleImportSettings = async (file: File | null) => {
     if (!file) return;
@@ -446,7 +552,8 @@ export default function ControlPanel({
           <FileUpload
             activeId={activeSavedId}
             savedModels={savedModels}
-            onFile={onFile}
+            externalError={importError ?? loadError}
+            onFiles={onFiles}
             onSelectSaved={onSelectSavedModel}
             onDeleteSaved={onDeleteSavedModel}
           />
@@ -485,21 +592,46 @@ export default function ControlPanel({
                 </button>
               ))}
             </div>
-            <label className="flex items-center justify-between text-xs text-zinc-400">
-              <span>Depth colors</span>
-              <input
-                type="checkbox"
-                checked={settings.depthColors}
-                onChange={(e) =>
-                  onSettingsChange({ depthColors: e.target.checked })
-                }
-                className="size-4 accent-indigo-500"
+            <div className="space-y-1.5">
+              <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+                Color mode
+              </p>
+              <ColorModeControl
+                value={settings.colorMode}
+                hasTextures={hasTextures}
+                onChange={(colorMode) => onSettingsChange({ colorMode })}
               />
-            </label>
-            {settings.depthColors && (
+            </div>
+            {showTextureLook && (
+              <div className="space-y-2">
+                <SliderRow
+                  label="Brightness"
+                  value={settings.textureBrightness}
+                  min={0.05}
+                  max={2}
+                  step={0.01}
+                  display={`${settings.textureBrightness.toFixed(2)}×`}
+                  onChange={(textureBrightness) =>
+                    onSettingsChange({ textureBrightness })
+                  }
+                />
+                <SliderRow
+                  label="Contrast"
+                  value={settings.textureContrast}
+                  min={0.2}
+                  max={2}
+                  step={0.01}
+                  display={`${settings.textureContrast.toFixed(2)}×`}
+                  onChange={(textureContrast) =>
+                    onSettingsChange({ textureContrast })
+                  }
+                />
+              </div>
+            )}
+            {showInvertDepth && (
               <div className="space-y-2">
                 <label className="flex items-center justify-between text-xs text-zinc-400">
-                  <span>Invert</span>
+                  <span>Invert depth</span>
                   <input
                     type="checkbox"
                     checked={settings.invertDepthColors}
@@ -565,6 +697,77 @@ export default function ControlPanel({
                     speed={settings[fx.speedKey]}
                     onSpeedChange={(speed) =>
                       onSettingsChange({ [fx.speedKey]: speed })
+                    }
+                    colorMode={
+                      fx.colorKey ? settings[fx.colorKey] : undefined
+                    }
+                    hasTextures={fx.colorKey ? hasTextures : undefined}
+                    onColorModeChange={
+                      fx.colorKey
+                        ? (mode) =>
+                            onSettingsChange({ [fx.colorKey!]: mode })
+                        : undefined
+                    }
+                    extra={
+                      fx.id === "mixPoints" ? (
+                        <div className="space-y-1.5 pl-1 pt-0.5">
+                          <SliderRow
+                            label="Point size"
+                            value={settings.glitchMixPointsSize}
+                            min={1}
+                            max={10}
+                            step={0.1}
+                            display={settings.glitchMixPointsSize.toFixed(1)}
+                            numberInput={false}
+                            onChange={(glitchMixPointsSize) =>
+                              onSettingsChange({ glitchMixPointsSize })
+                            }
+                          />
+                          <SliderRow
+                            label="Density %"
+                            value={settings.glitchMixPointsDensity}
+                            min={0}
+                            max={100}
+                            step={0.01}
+                            toSliderPos={densityToSliderPos}
+                            fromSliderPos={sliderPosToDensity}
+                            sliderMin={0}
+                            sliderMax={DENSITY_SLIDER_MAX}
+                            sliderStep={1}
+                            numberInput={false}
+                            onChange={(glitchMixPointsDensity) =>
+                              onSettingsChange({ glitchMixPointsDensity })
+                            }
+                          />
+                        </div>
+                      ) : fx.id === "mixSolid" ? (
+                        <div className="space-y-1.5 pl-1 pt-0.5">
+                          <SliderRow
+                            label="Brightness"
+                            value={settings.glitchMixSolidBrightness}
+                            min={0.05}
+                            max={2}
+                            step={0.01}
+                            display={`${settings.glitchMixSolidBrightness.toFixed(2)}×`}
+                            numberInput={false}
+                            onChange={(glitchMixSolidBrightness) =>
+                              onSettingsChange({ glitchMixSolidBrightness })
+                            }
+                          />
+                          <SliderRow
+                            label="Contrast"
+                            value={settings.glitchMixSolidContrast}
+                            min={0.2}
+                            max={2}
+                            step={0.01}
+                            display={`${settings.glitchMixSolidContrast.toFixed(2)}×`}
+                            numberInput={false}
+                            onChange={(glitchMixSolidContrast) =>
+                              onSettingsChange({ glitchMixSolidContrast })
+                            }
+                          />
+                        </div>
+                      ) : undefined
                     }
                   />
                 ))}

@@ -5,10 +5,16 @@ import {
   GLOBAL_VIEW_STORAGE_KEY,
   LAST_SOURCE_STORAGE_KEY,
   STORAGE_KEY,
+  type ColorMode,
   type GlobalViewSettings,
   type ModelSettings,
   type ObjectSettings,
 } from "./types";
+
+function parseColorMode(value: unknown, fallback: ColorMode): ColorMode {
+  if (value === "gray" || value === "depth" || value === "texture") return value;
+  return fallback;
+}
 
 type SettingsMap = Record<string, Partial<ObjectSettings>>;
 
@@ -247,6 +253,7 @@ function loadGlobalView(): GlobalViewSettings {
       glitchMixPointsMax: _mpmax,
       glitchMixSolidMin: _msmin,
       glitchMixSolidMax: _msmax,
+      depthColors: legacyDepthColors,
       ...rest
     } = parsed;
     void _gm;
@@ -276,9 +283,29 @@ function loadGlobalView(): GlobalViewSettings {
     void _msmin;
     void _msmax;
 
+    const migratedColorMode =
+      "colorMode" in rest
+        ? parseColorMode(rest.colorMode, DEFAULT_GLOBAL_VIEW.colorMode)
+        : legacyDepthColors === true
+          ? "depth"
+          : DEFAULT_GLOBAL_VIEW.colorMode;
+
     return {
       ...DEFAULT_GLOBAL_VIEW,
       ...(rest as Partial<GlobalViewSettings>),
+      colorMode: migratedColorMode,
+      glitchMixWireColor: parseColorMode(
+        rest.glitchMixWireColor,
+        DEFAULT_GLOBAL_VIEW.glitchMixWireColor,
+      ),
+      glitchMixPointsColor: parseColorMode(
+        rest.glitchMixPointsColor,
+        DEFAULT_GLOBAL_VIEW.glitchMixPointsColor,
+      ),
+      glitchMixSolidColor: parseColorMode(
+        rest.glitchMixSolidColor,
+        DEFAULT_GLOBAL_VIEW.glitchMixSolidColor,
+      ),
       glitchDigitalMin: digital.min,
       glitchDigitalMax: digital.max,
       glitchDeformMin: deform.min,
@@ -300,7 +327,7 @@ function loadGlobalView(): GlobalViewSettings {
       glitchMixCellSize:
         typeof parsed.glitchMixCellSize === "number" &&
         Number.isFinite(parsed.glitchMixCellSize)
-          ? Math.min(5, Math.max(0.001, parsed.glitchMixCellSize))
+          ? Math.min(20, Math.max(0.001, parsed.glitchMixCellSize))
           : DEFAULT_GLOBAL_VIEW.glitchMixCellSize,
       ...(() => {
         const legacySpeed =
@@ -468,8 +495,10 @@ export function saveObjectSettings(
 export function pickGlobalView(settings: ModelSettings): GlobalViewSettings {
   return {
     displayMode: settings.displayMode,
-    depthColors: settings.depthColors,
+    colorMode: settings.colorMode,
     invertDepthColors: settings.invertDepthColors,
+    textureBrightness: settings.textureBrightness,
+    textureContrast: settings.textureContrast,
     glitch: settings.glitch,
     glitchMixCellSize: settings.glitchMixCellSize,
     glitchDigitalMin: settings.glitchDigitalMin,
@@ -493,12 +522,19 @@ export function pickGlobalView(settings: ModelSettings): GlobalViewSettings {
     glitchMixWireMin: settings.glitchMixWireMin,
     glitchMixWireMax: settings.glitchMixWireMax,
     glitchMixWireSpeed: settings.glitchMixWireSpeed,
+    glitchMixWireColor: settings.glitchMixWireColor,
     glitchMixPointsMin: settings.glitchMixPointsMin,
     glitchMixPointsMax: settings.glitchMixPointsMax,
     glitchMixPointsSpeed: settings.glitchMixPointsSpeed,
+    glitchMixPointsColor: settings.glitchMixPointsColor,
+    glitchMixPointsSize: settings.glitchMixPointsSize,
+    glitchMixPointsDensity: settings.glitchMixPointsDensity,
     glitchMixSolidMin: settings.glitchMixSolidMin,
     glitchMixSolidMax: settings.glitchMixSolidMax,
     glitchMixSolidSpeed: settings.glitchMixSolidSpeed,
+    glitchMixSolidColor: settings.glitchMixSolidColor,
+    glitchMixSolidBrightness: settings.glitchMixSolidBrightness,
+    glitchMixSolidContrast: settings.glitchMixSolidContrast,
     pointSize: settings.pointSize,
     pointDensity: settings.pointDensity,
     lineWidth: settings.lineWidth,

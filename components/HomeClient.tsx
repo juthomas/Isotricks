@@ -18,11 +18,16 @@ import { DEFAULT_DEMO_ID, type DemoId, type ObjectSource } from "@/lib/types";
 import type { ExportModelSource } from "@/lib/exportScene";
 import {
   deleteUserModel,
-  getUserModelBlob,
+  getUserModelPackage,
   listUserModels,
-  saveUserModel,
+  saveUserModelPackage,
   type UserModelMeta,
 } from "@/lib/userModels";
+import { splitModelFiles } from "@/lib/loaders";
+import {
+  deleteSessionPackage,
+  setSessionPackage,
+} from "@/lib/sessionPackages";
 
 const IsoViewer = dynamic(() => import("@/components/IsoViewer"), {
   ssr: false,
@@ -90,6 +95,7 @@ export default function HomeClient() {
   const [sourceReady, setSourceReady] = useState(false);
   const [immersive, setImmersive] = useState(false);
   const [cursorHidden, setCursorHidden] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const cursorHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const objectKey = useMemo(() => {
@@ -132,10 +138,15 @@ export default function HomeClient() {
 
         const last = loadLastSource();
         if (last?.kind === "file") {
-          const loaded = await getUserModelBlob(last.id);
+          const loaded = await getUserModelPackage(last.id);
           if (cancelled) return;
           if (loaded) {
-            const url = URL.createObjectURL(loaded.blob);
+            setSessionPackage(
+              loaded.meta.id,
+              loaded.primary,
+              loaded.assets,
+            );
+            const url = URL.createObjectURL(loaded.primary.blob);
             setBlobUrl(url);
             setSource({
               kind: "file",
@@ -244,15 +255,21 @@ export default function HomeClient() {
   const onSelectDemo = useCallback((id: DemoId) => {
     const demo = DEMO_LIST.find((d) => d.id === id);
     if (!demo) return;
+    setImportError(null);
     setSource({ kind: "demo", id: demo.id, label: demo.label });
   }, []);
 
   const openSavedModel = useCallback(
     async (id: string) => {
-      const loaded = await getUserModelBlob(id);
-      if (!loaded) return;
+      const loaded = await getUserModelPackage(id);
+      if (!loaded) {
+        setImportError("Could not open saved model");
+        return;
+      }
+      setImportError(null);
+      setSessionPackage(loaded.meta.id, loaded.primary, loaded.assets);
       if (blobUrl) URL.revokeObjectURL(blobUrl);
-      const url = URL.createObjectURL(loaded.blob);
+      const url = URL.createObjectURL(loaded.primary.blob);
       setBlobUrl(url);
       setSettings({ autoCycle: false });
       setSource({
@@ -266,36 +283,38 @@ export default function HomeClient() {
     [blobUrl, setSettings],
   );
 
-  const onFile = useCallback(
-    async (file: File) => {
+  const onFiles = useCallback(
+    async (files: File[]) => {
+      const { primary, sidecars, error } = splitModelFiles(files);
+      if (!primary || error) {
+        setImportError(
+          error ??
+            "Unsupported files. Need one mesh plus optional .mtl / textures.",
+        );
+        return;
+      }
+      setImportError(null);
+
+      // Show the model immediately (same as obj_origin_modifier); persist in background
+      const id = crypto.randomUUID();
+      setSessionPackage(id, primary, sidecars);
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      const url = URL.createObjectURL(primary);
+      setBlobUrl(url);
+      setSettings({ autoCycle: false });
+      setSource({
+        kind: "file",
+        id,
+        label: primary.name,
+        url,
+        fileName: primary.name,
+      });
+
       try {
-        const meta = await saveUserModel(file);
+        await saveUserModelPackage(primary, sidecars, id);
         setSavedModels(await listUserModels());
-        if (blobUrl) URL.revokeObjectURL(blobUrl);
-        const url = URL.createObjectURL(file);
-        setBlobUrl(url);
-        // Uploading a custom file pauses auto-cycle so the import stays visible
-        setSettings({ autoCycle: false });
-        setSource({
-          kind: "file",
-          id: meta.id,
-          label: meta.fileName,
-          url,
-          fileName: meta.fileName,
-        });
       } catch {
-        // Fallback: session-only blob if IndexedDB write fails
-        if (blobUrl) URL.revokeObjectURL(blobUrl);
-        const url = URL.createObjectURL(file);
-        setBlobUrl(url);
-        setSettings({ autoCycle: false });
-        setSource({
-          kind: "file",
-          id: crypto.randomUUID(),
-          label: file.name,
-          url,
-          fileName: file.name,
-        });
+        // Session package already has .mtl / maps for this tab
       }
     },
     [blobUrl, setSettings],
@@ -304,6 +323,7 @@ export default function HomeClient() {
   const onDeleteSavedModel = useCallback(
     async (id: string) => {
       await deleteUserModel(id);
+      deleteSessionPackage(id);
       setSavedModels(await listUserModels());
       if (source.kind === "file" && source.id === id) {
         if (blobUrl) URL.revokeObjectURL(blobUrl);
@@ -416,13 +436,18 @@ export default function HomeClient() {
         <ControlPanel
           source={source}
           settings={settings}
+          hasTextures={loadState.hasTextures}
           panelOpen={panelOpen}
           savedModels={savedModels}
           videoExport={videoExport}
           sceneClock={sceneClock}
+          importError={importError}
+          loadError={loadState.error}
           onTogglePanel={() => setPanelOverride(!panelOpen)}
           onSelectDemo={onSelectDemo}
-          onFile={onFile}
+          onFiles={(files) => {
+            void onFiles(files);
+          }}
           onSelectSavedModel={(id) => {
             void openSavedModel(id);
           }}

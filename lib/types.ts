@@ -1,5 +1,7 @@
 export type DisplayMode = "wireframe" | "points" | "solid";
 
+export type ColorMode = "gray" | "depth" | "texture";
+
 export type RotationDirection = 1 | -1 | 0;
 
 export type GlitchEffectId =
@@ -13,11 +15,21 @@ export type GlitchEffectId =
   | "mixPoints"
   | "mixSolid";
 
+export type GlitchMixColorKey =
+  | "glitchMixWireColor"
+  | "glitchMixPointsColor"
+  | "glitchMixSolidColor";
+
 /** Project-wide view prefs (shared across all models) */
 export type GlobalViewSettings = {
   displayMode: DisplayMode;
-  depthColors: boolean;
+  /** Base layer shading: flat gray, depth gradient, or original textures */
+  colorMode: ColorMode;
   invertDepthColors: boolean;
+  /** Multiplier for textured materials (1 = original) */
+  textureBrightness: number;
+  /** Contrast around mid-gray for textured materials (1 = original) */
+  textureContrast: number;
   /** Master glitch toggle (any display mode) */
   glitch: boolean;
   /** World-space size of mix cells (larger = bigger zones) */
@@ -43,12 +55,23 @@ export type GlobalViewSettings = {
   glitchMixWireMin: number;
   glitchMixWireMax: number;
   glitchMixWireSpeed: number;
+  glitchMixWireColor: ColorMode;
   glitchMixPointsMin: number;
   glitchMixPointsMax: number;
   glitchMixPointsSpeed: number;
+  glitchMixPointsColor: ColorMode;
+  /** Point size for mix-points layer only */
+  glitchMixPointsSize: number;
+  /** Point density % for mix-points layer only */
+  glitchMixPointsDensity: number;
   glitchMixSolidMin: number;
   glitchMixSolidMax: number;
   glitchMixSolidSpeed: number;
+  glitchMixSolidColor: ColorMode;
+  /** Brightness for mix-solid layer (esp. texture) */
+  glitchMixSolidBrightness: number;
+  /** Contrast for mix-solid layer (esp. texture) */
+  glitchMixSolidContrast: number;
   pointSize: number;
   /** Percent of vertices to draw as points (0–100) */
   pointDensity: number;
@@ -111,6 +134,7 @@ export const GLITCH_EFFECTS: {
   minKey: GlitchRangeKey;
   maxKey: GlitchRangeKey;
   speedKey: GlitchSpeedKey;
+  colorKey?: GlitchMixColorKey;
   phase: number;
 }[] = [
   {
@@ -167,6 +191,7 @@ export const GLITCH_EFFECTS: {
     minKey: "glitchMixWireMin",
     maxKey: "glitchMixWireMax",
     speedKey: "glitchMixWireSpeed",
+    colorKey: "glitchMixWireColor",
     phase: 5.2,
   },
   {
@@ -175,6 +200,7 @@ export const GLITCH_EFFECTS: {
     minKey: "glitchMixPointsMin",
     maxKey: "glitchMixPointsMax",
     speedKey: "glitchMixPointsSpeed",
+    colorKey: "glitchMixPointsColor",
     phase: 6.1,
   },
   {
@@ -183,14 +209,43 @@ export const GLITCH_EFFECTS: {
     minKey: "glitchMixSolidMin",
     maxKey: "glitchMixSolidMax",
     speedKey: "glitchMixSolidSpeed",
+    colorKey: "glitchMixSolidColor",
     phase: 7.0,
   },
 ];
 
+export const COLOR_MODES: { id: ColorMode; label: string }[] = [
+  { id: "gray", label: "Gray" },
+  { id: "depth", label: "Depth" },
+  { id: "texture", label: "Texture" },
+];
+
+export function usesDepthColor(settings: GlobalViewSettings): boolean {
+  if (settings.colorMode === "depth") return true;
+  if (!settings.glitch) return false;
+  return (
+    settings.glitchMixWireColor === "depth" ||
+    settings.glitchMixPointsColor === "depth" ||
+    settings.glitchMixSolidColor === "depth"
+  );
+}
+
+export function usesTextureColor(settings: GlobalViewSettings): boolean {
+  if (settings.colorMode === "texture") return true;
+  if (!settings.glitch) return false;
+  return (
+    settings.glitchMixWireColor === "texture" ||
+    settings.glitchMixPointsColor === "texture" ||
+    settings.glitchMixSolidColor === "texture"
+  );
+}
+
 export const GLOBAL_VIEW_KEYS = [
   "displayMode",
-  "depthColors",
+  "colorMode",
   "invertDepthColors",
+  "textureBrightness",
+  "textureContrast",
   "glitch",
   "glitchMixCellSize",
   "glitchDigitalMin",
@@ -214,12 +269,19 @@ export const GLOBAL_VIEW_KEYS = [
   "glitchMixWireMin",
   "glitchMixWireMax",
   "glitchMixWireSpeed",
+  "glitchMixWireColor",
   "glitchMixPointsMin",
   "glitchMixPointsMax",
   "glitchMixPointsSpeed",
+  "glitchMixPointsColor",
+  "glitchMixPointsSize",
+  "glitchMixPointsDensity",
   "glitchMixSolidMin",
   "glitchMixSolidMax",
   "glitchMixSolidSpeed",
+  "glitchMixSolidColor",
+  "glitchMixSolidBrightness",
+  "glitchMixSolidContrast",
   "pointSize",
   "pointDensity",
   "lineWidth",
@@ -311,8 +373,10 @@ export const EXTERNAL_ASSETS = {
 
 export const DEFAULT_GLOBAL_VIEW: GlobalViewSettings = {
   displayMode: "points",
-  depthColors: false,
+  colorMode: "gray",
   invertDepthColors: false,
+  textureBrightness: 1,
+  textureContrast: 1,
   glitch: false,
   glitchMixCellSize: 0.15,
   glitchDigitalMin: 0.55,
@@ -336,12 +400,19 @@ export const DEFAULT_GLOBAL_VIEW: GlobalViewSettings = {
   glitchMixWireMin: 0,
   glitchMixWireMax: 0,
   glitchMixWireSpeed: 0.6,
+  glitchMixWireColor: "gray",
   glitchMixPointsMin: 0,
   glitchMixPointsMax: 0,
   glitchMixPointsSpeed: 0.6,
+  glitchMixPointsColor: "gray",
+  glitchMixPointsSize: 2,
+  glitchMixPointsDensity: 100,
   glitchMixSolidMin: 0,
   glitchMixSolidMax: 0,
   glitchMixSolidSpeed: 0.6,
+  glitchMixSolidColor: "gray",
+  glitchMixSolidBrightness: 1,
+  glitchMixSolidContrast: 1,
   pointSize: 2,
   pointDensity: 100,
   lineWidth: 1,
@@ -410,7 +481,7 @@ export function syncGlitchUniforms(
   time: number,
 ): void {
   gu.uGlitchTime.value = time;
-  const cellSize = Math.min(5, Math.max(0.001, settings.glitchMixCellSize));
+  const cellSize = Math.min(20, Math.max(0.001, settings.glitchMixCellSize));
   gu.uMixScale.value = 1 / cellSize;
 
   const mixFlickerSpeed = Math.max(

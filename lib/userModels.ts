@@ -1,7 +1,7 @@
 "use client";
 
 const DB_NAME = "iso_tricks";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = "user_models";
 
 export type UserModelMeta = {
@@ -9,11 +9,25 @@ export type UserModelMeta = {
   fileName: string;
   size: number;
   createdAt: number;
+  /** Extra sidecar files (mtl, maps) stored with the mesh. */
+  assetCount: number;
 };
 
-type UserModelRecord = UserModelMeta & {
+export type UserModelAsset = {
+  fileName: string;
   mimeType: string;
   data: ArrayBuffer;
+};
+
+type UserModelRecord = {
+  id: string;
+  fileName: string;
+  size: number;
+  createdAt: number;
+  mimeType: string;
+  data: ArrayBuffer;
+  /** Optional package assets (v2). */
+  assets?: UserModelAsset[];
 };
 
 function openDb(): Promise<IDBDatabase> {
@@ -39,14 +53,41 @@ function idbRequest<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
-export async function saveUserModel(file: File): Promise<UserModelMeta> {
-  const data = await file.arrayBuffer();
+function toMeta(record: UserModelRecord): UserModelMeta {
+  return {
+    id: record.id,
+    fileName: record.fileName,
+    size: record.size,
+    createdAt: record.createdAt,
+    assetCount: record.assets?.length ?? 0,
+  };
+}
+
+export async function saveUserModelPackage(
+  primary: File,
+  sidecars: File[] = [],
+  id: string = crypto.randomUUID(),
+): Promise<UserModelMeta> {
+  const data = await primary.arrayBuffer();
+  const assets: UserModelAsset[] = [];
+  let totalSize = primary.size;
+  for (const file of sidecars) {
+    const buf = await file.arrayBuffer();
+    assets.push({
+      fileName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      data: buf,
+    });
+    totalSize += file.size;
+  }
+
   const record: UserModelRecord = {
-    id: crypto.randomUUID(),
-    fileName: file.name,
-    size: file.size,
-    mimeType: file.type || "application/octet-stream",
+    id,
+    fileName: primary.name,
+    size: totalSize,
+    mimeType: primary.type || "application/octet-stream",
     data,
+    assets: assets.length > 0 ? assets : undefined,
     createdAt: Date.now(),
   };
 
@@ -59,12 +100,12 @@ export async function saveUserModel(file: File): Promise<UserModelMeta> {
     db.close();
   }
 
-  return {
-    id: record.id,
-    fileName: record.fileName,
-    size: record.size,
-    createdAt: record.createdAt,
-  };
+  return toMeta(record);
+}
+
+/** @deprecated Prefer saveUserModelPackage */
+export async function saveUserModel(file: File): Promise<UserModelMeta> {
+  return saveUserModelPackage(file, []);
 }
 
 export async function listUserModels(): Promise<UserModelMeta[]> {
@@ -73,14 +114,7 @@ export async function listUserModels(): Promise<UserModelMeta[]> {
     const records = await idbRequest<UserModelRecord[]>(
       db.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).getAll(),
     );
-    return records
-      .map(({ id, fileName, size, createdAt }) => ({
-        id,
-        fileName,
-        size,
-        createdAt,
-      }))
-      .sort((a, b) => b.createdAt - a.createdAt);
+    return records.map(toMeta).sort((a, b) => b.createdAt - a.createdAt);
   } finally {
     db.close();
   }
@@ -96,13 +130,37 @@ export async function getUserModelBlob(
     );
     if (!record) return null;
     return {
-      meta: {
-        id: record.id,
-        fileName: record.fileName,
-        size: record.size,
-        createdAt: record.createdAt,
-      },
+      meta: toMeta(record),
       blob: new Blob([record.data], { type: record.mimeType }),
+    };
+  } finally {
+    db.close();
+  }
+}
+
+export async function getUserModelPackage(
+  id: string,
+): Promise<{
+  meta: UserModelMeta;
+  primary: { fileName: string; blob: Blob };
+  assets: { fileName: string; blob: Blob }[];
+} | null> {
+  const db = await openDb();
+  try {
+    const record = await idbRequest<UserModelRecord | undefined>(
+      db.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).get(id),
+    );
+    if (!record) return null;
+    return {
+      meta: toMeta(record),
+      primary: {
+        fileName: record.fileName,
+        blob: new Blob([record.data], { type: record.mimeType }),
+      },
+      assets: (record.assets ?? []).map((a) => ({
+        fileName: a.fileName,
+        blob: new Blob([a.data], { type: a.mimeType }),
+      })),
     };
   } finally {
     db.close();

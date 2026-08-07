@@ -3,12 +3,19 @@
 import { useEffect, useState } from "react";
 import * as THREE from "three";
 import { createDemoObject, getDemo } from "@/lib/demos";
-import { loadModelFromUrl } from "@/lib/loaders";
+import {
+  detectHasTextures,
+  loadModelFromPackage,
+  loadModelFromUrl,
+} from "@/lib/loaders";
 import type { ObjectSource } from "@/lib/types";
+import { getSessionPackage } from "@/lib/sessionPackages";
+import { getUserModelPackage } from "@/lib/userModels";
 
 export type LoadState = {
   status: "loading" | "ready" | "error";
   object: THREE.Object3D | null;
+  hasTextures: boolean;
   error: string | null;
 };
 
@@ -21,16 +28,17 @@ export function useLoadedObject(source: ObjectSource): LoadState {
   const [state, setState] = useState<LoadState>({
     status: "loading",
     object: null,
+    hasTextures: false,
     error: null,
   });
   const [loadedKey, setLoadedKey] = useState(sourceKey);
 
-  // Keep the previous object visible while the next one loads (no blank flash)
   if (loadedKey !== sourceKey) {
     setLoadedKey(sourceKey);
     setState((prev) => ({
       status: "loading",
       object: prev.object,
+      hasTextures: prev.hasTextures,
       error: null,
     }));
   }
@@ -41,6 +49,7 @@ export function useLoadedObject(source: ObjectSource): LoadState {
     async function run() {
       try {
         let object: THREE.Object3D;
+        let hasTextures = false;
 
         if (source.kind === "demo") {
           const demo = getDemo(source.id);
@@ -49,18 +58,37 @@ export function useLoadedObject(source: ObjectSource): LoadState {
           } else {
             object = createDemoObject(source.id);
           }
+          hasTextures = detectHasTextures(object);
+          object.userData.hasTextures = hasTextures;
         } else {
-          object = await loadModelFromUrl(source.url, source.fileName);
+          const session = getSessionPackage(source.id);
+          const idb = session ? null : await getUserModelPackage(source.id);
+          const pkg = session
+            ? { primary: session.primary, assets: session.assets }
+            : idb
+              ? { primary: idb.primary, assets: idb.assets }
+              : null;
+
+          if (pkg) {
+            const loaded = await loadModelFromPackage(pkg.primary, pkg.assets);
+            object = loaded.object;
+            hasTextures = loaded.hasTextures;
+          } else {
+            object = await loadModelFromUrl(source.url, source.fileName);
+            hasTextures = detectHasTextures(object);
+            object.userData.hasTextures = hasTextures;
+          }
         }
 
         if (!cancelled) {
-          setState({ status: "ready", object, error: null });
+          setState({ status: "ready", object, hasTextures, error: null });
         }
       } catch (err) {
         if (!cancelled) {
           setState((prev) => ({
             status: "error",
             object: prev.object,
+            hasTextures: prev.hasTextures,
             error: err instanceof Error ? err.message : "Failed to load model",
           }));
         }
@@ -71,7 +99,6 @@ export function useLoadedObject(source: ObjectSource): LoadState {
     return () => {
       cancelled = true;
     };
-    // Intentionally keyed by sourceKey; source fields are read for that key only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceKey]);
 

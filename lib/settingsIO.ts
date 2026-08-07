@@ -22,6 +22,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const DISPLAY_MODES = new Set(["wireframe", "points", "solid"]);
+const COLOR_MODES = new Set(["gray", "depth", "texture"]);
 const ROTATION_DIRS = new Set([1, -1, 0]);
 
 function clamp(n: number, min: number, max: number): number {
@@ -42,16 +43,43 @@ function pickKnownSettings(raw: Record<string, unknown>): ModelSettings {
     }
   }
 
+  // Legacy depthColors → colorMode
+  if (!("colorMode" in raw) && raw.depthColors === true) {
+    next.colorMode = "depth";
+  }
+
   if (!DISPLAY_MODES.has(next.displayMode)) {
     next.displayMode = DEFAULT_SETTINGS.displayMode;
+  }
+  if (!COLOR_MODES.has(next.colorMode)) {
+    next.colorMode = DEFAULT_SETTINGS.colorMode;
+  }
+  if (!COLOR_MODES.has(next.glitchMixWireColor)) {
+    next.glitchMixWireColor = DEFAULT_SETTINGS.glitchMixWireColor;
+  }
+  if (!COLOR_MODES.has(next.glitchMixPointsColor)) {
+    next.glitchMixPointsColor = DEFAULT_SETTINGS.glitchMixPointsColor;
+  }
+  if (!COLOR_MODES.has(next.glitchMixSolidColor)) {
+    next.glitchMixSolidColor = DEFAULT_SETTINGS.glitchMixSolidColor;
   }
   if (!ROTATION_DIRS.has(next.rotationDirection)) {
     next.rotationDirection = DEFAULT_SETTINGS.rotationDirection;
   }
 
-  next.glitchMixCellSize = clamp(next.glitchMixCellSize, 0.001, 5);
+  next.glitchMixCellSize = clamp(next.glitchMixCellSize, 0.001, 20);
+  next.textureBrightness = clamp(next.textureBrightness, 0.05, 2);
+  next.textureContrast = clamp(next.textureContrast, 0.2, 2);
+  next.glitchMixSolidBrightness = clamp(
+    next.glitchMixSolidBrightness,
+    0.05,
+    2,
+  );
+  next.glitchMixSolidContrast = clamp(next.glitchMixSolidContrast, 0.2, 2);
   next.pointDensity = clamp(next.pointDensity, 0, 100);
   next.pointSize = clamp(next.pointSize, 1, 10);
+  next.glitchMixPointsDensity = clamp(next.glitchMixPointsDensity, 0, 100);
+  next.glitchMixPointsSize = clamp(next.glitchMixPointsSize, 1, 10);
   next.lineWidth = clamp(next.lineWidth, 0.5, 10);
   next.autoCycleSeconds = clamp(next.autoCycleSeconds, 1, 120);
   next.timeScale = clamp(next.timeScale, 0.00001, 4);

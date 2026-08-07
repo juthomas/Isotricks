@@ -5,6 +5,8 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import {
   syncGlitchUniforms,
+  usesDepthColor,
+  type ColorMode,
   type DisplayMode,
   type GlitchRuntimeUniforms,
   type ModelSettings,
@@ -30,6 +32,32 @@ const OVERLAP_BLENDING = {
   depthTest: false,
 } as const;
 
+/**
+ * When texture cells are opaque, non-texture mix layers also stay in the opaque
+ * pass with depth testing so they cannot paint through textures afterward.
+ */
+const OVERLAP_BLENDING_DEPTH = {
+  blending: THREE.NormalBlending,
+  transparent: false,
+  depthWrite: true,
+  depthTest: true,
+  opacity: 1,
+} as const;
+
+/** Opaque texture cells — write depth so later wire/points are occluded. */
+const TEXTURE_OPAQUE = {
+  blending: THREE.NormalBlending,
+  transparent: false,
+  depthWrite: true,
+  depthTest: true,
+  opacity: 1,
+} as const;
+
+const TEXTURE_RENDER_ORDER = 10;
+const OVERLAP_RENDER_ORDER = 0;
+
+type OverlapBlending = typeof OVERLAP_BLENDING | typeof OVERLAP_BLENDING_DEPTH;
+
 type LoadedModelProps = {
   object: THREE.Object3D;
   settings: ModelSettings;
@@ -47,6 +75,11 @@ type DepthUniforms = {
 };
 
 type GlitchUniforms = GlitchRuntimeUniforms;
+
+type TextureLookUniforms = {
+  uTexBright: { value: number };
+  uTexContrast: { value: number };
+};
 
 const MIX_LAYER_BASE = 0;
 const MIX_LAYER_WIRE = 1;
@@ -98,6 +131,20 @@ if (uInvertDepth > 0.5) t = 1.0 - t;
 diffuseColor.rgb = depthGradient(t);
 `;
 
+const TEXTURE_LOOK_FRAGMENT_PARS = /* glsl */ `
+uniform float uTexBright;
+uniform float uTexContrast;
+`;
+
+const TEXTURE_LOOK_FRAGMENT_COLOR = /* glsl */ `
+{
+  vec3 c = diffuseColor.rgb;
+  c = (c - 0.5) * uTexContrast + 0.5;
+  c *= uTexBright;
+  diffuseColor.rgb = clamp(c, 0.0, 1.0);
+}
+`;
+
 const GLITCH_VERTEX_PARS = /* glsl */ `
 uniform float uGlitchTime;
 uniform float uGlitchDigital;
@@ -113,7 +160,7 @@ uniform float uMixFlicker;
 uniform float uMixScale;
 uniform float uMixLayer;
 uniform float uBaseMode;
-varying vec3 vGlitchWorldPos;
+varying vec3 vGlitchLocalPos;
 float isoGlitchHash(float n) { return fract(sin(n) * 43758.5453123); }
 `;
 
@@ -132,7 +179,7 @@ uniform float uMixFlicker;
 uniform float uMixScale;
 uniform float uMixLayer;
 uniform float uBaseMode;
-varying vec3 vGlitchWorldPos;
+varying vec3 vGlitchLocalPos;
 float isoGlitchHash(float n) { return fract(sin(n) * 43758.5453123); }
 `;
 
@@ -194,7 +241,7 @@ const GLITCH_AFTER_BEGIN = /* glsl */ `
     }
   }
 
-  vGlitchWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+  vGlitchLocalPos = transformed;
 }
 `;
 
@@ -228,7 +275,7 @@ const GLITCH_MIX_DISCARD = /* glsl */ `
     ns = s / sum;
   }
   float cell = isoGlitchHash(
-    dot(floor(vGlitchWorldPos * max(uMixScale, 0.01)), vec3(1.0, 17.0, 31.0))
+    dot(floor(vGlitchLocalPos * max(uMixScale, 0.01)), vec3(1.0, 17.0, 31.0))
     + floor(uGlitchTime * max(uMixFlicker, 0.01))
   );
   float chosen = 0.0;
@@ -336,10 +383,12 @@ function patchMaterialEffects(
   glitchUniforms: GlitchUniforms | null,
   mixLayer: number,
   baseMode: number,
+  textureLook: TextureLookUniforms | null,
 ): void {
   const useDepth = depthUniforms !== null;
   const useGlitch = glitchUniforms !== null;
-  if (!useDepth && !useGlitch) return;
+  const useTexLook = textureLook !== null;
+  if (!useDepth && !useGlitch && !useTexLook) return;
 
   const mixLayerUniform = { value: mixLayer };
   const baseModeUniform = { value: baseMode };
@@ -347,6 +396,7 @@ function patchMaterialEffects(
   material.onBeforeCompile = (shader) => {
     if (depthUniforms) Object.assign(shader.uniforms, depthUniforms);
     if (glitchUniforms) Object.assign(shader.uniforms, glitchUniforms);
+    if (textureLook) Object.assign(shader.uniforms, textureLook);
     if (useGlitch) {
       shader.uniforms.uMixLayer = mixLayerUniform;
       shader.uniforms.uBaseMode = baseModeUniform;
@@ -361,22 +411,27 @@ function patchMaterialEffects(
     if (useDepth) afterProject += DEPTH_VERTEX_MAIN;
     if (useGlitch) afterProject += GLITCH_AFTER_PROJECT;
 
-    shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", `#include <common>\n${vertexCommon}`)
-      .replace(
-        "#include <begin_vertex>",
-        `#include <begin_vertex>\n${afterBegin}`,
-      )
-      .replace(
-        "#include <project_vertex>",
-        `#include <project_vertex>\n${afterProject}`,
-      );
+    if (vertexCommon || afterBegin || afterProject) {
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", `#include <common>\n${vertexCommon}`)
+        .replace(
+          "#include <begin_vertex>",
+          `#include <begin_vertex>\n${afterBegin}`,
+        )
+        .replace(
+          "#include <project_vertex>",
+          `#include <project_vertex>\n${afterProject}`,
+        );
+    }
 
     let fragPars = "";
     if (useDepth) fragPars += DEPTH_FRAGMENT_PARS;
     if (useGlitch) fragPars += GLITCH_FRAGMENT_PARS;
+    if (useTexLook) fragPars += TEXTURE_LOOK_FRAGMENT_PARS;
 
     let fragColor = "";
+    // Texture look before depth so depth still fully replaces color when active
+    if (useTexLook) fragColor += TEXTURE_LOOK_FRAGMENT_COLOR;
     if (useDepth) fragColor += DEPTH_FRAGMENT_COLOR;
     if (useGlitch) fragColor += GLITCH_FRAGMENT_COLOR;
 
@@ -397,7 +452,7 @@ function patchMaterialEffects(
     }
   };
   material.customProgramCacheKey = () =>
-    `iso-fx-d${useDepth ? 1 : 0}-g${useGlitch ? 1 : 0}-m${mixLayer}-b${baseMode}-v5`;
+    `iso-fx-d${useDepth ? 1 : 0}-g${useGlitch ? 1 : 0}-t${useTexLook ? 1 : 0}-m${mixLayer}-b${baseMode}-v7`;
   material.needsUpdate = true;
 }
 
@@ -433,21 +488,173 @@ function subsamplePositionAttribute(
   return new THREE.BufferAttribute(arr, itemSize);
 }
 
+function resolveColorMode(mode: ColorMode, hasTextures: boolean): ColorMode {
+  if (mode === "texture" && !hasTextures) return "gray";
+  return mode;
+}
+
+function firstMaterial(
+  material: THREE.Material | THREE.Material[],
+): THREE.Material | null {
+  if (Array.isArray(material)) return material[0] ?? null;
+  return material;
+}
+
+function materialList(
+  material: THREE.Material | THREE.Material[],
+): THREE.Material[] {
+  return Array.isArray(material) ? material : [material];
+}
+
+function applyFlatColorMode(
+  mat: THREE.Material,
+  colorMode: ColorMode,
+  grayHex: number,
+): void {
+  if (
+    !(
+      mat instanceof THREE.MeshBasicMaterial ||
+      mat instanceof THREE.MeshStandardMaterial ||
+      mat instanceof THREE.MeshPhongMaterial ||
+      mat instanceof THREE.MeshLambertMaterial
+    )
+  ) {
+    return;
+  }
+  mat.wireframe = false;
+  if (colorMode === "texture") return;
+  mat.map = null;
+  if ("vertexColors" in mat) mat.vertexColors = false;
+  mat.color.setHex(grayHex);
+}
+
+/** Unlit copy for mix/wire overlays — preserves MTL Kd / maps. */
+function ensureMapColorSpace(map: THREE.Texture | null): void {
+  if (!map) return;
+  if (map.colorSpace !== THREE.SRGBColorSpace) {
+    map.colorSpace = THREE.SRGBColorSpace;
+    map.needsUpdate = true;
+  }
+}
+
+function sourceDiffuseColor(source: THREE.Material): THREE.Color {
+  if ("color" in source && source.color instanceof THREE.Color) {
+    return source.color.clone();
+  }
+  return new THREE.Color(0xffffff);
+}
+
+function createTexturedSolidMaterial(
+  source: THREE.Material,
+): THREE.MeshBasicMaterial {
+  const map =
+    "map" in source && source.map instanceof THREE.Texture ? source.map : null;
+  ensureMapColorSpace(map);
+  const vertexColors = Boolean(
+    "vertexColors" in source && source.vertexColors,
+  );
+  // With a map, keep tint white so the image drives color; otherwise keep MTL Kd
+  const color =
+    map || vertexColors
+      ? new THREE.Color(0xffffff)
+      : sourceDiffuseColor(source);
+  return new THREE.MeshBasicMaterial({
+    color,
+    map,
+    vertexColors,
+    toneMapped: true,
+    side: "side" in source ? source.side : THREE.DoubleSide,
+    ...TEXTURE_OPAQUE,
+  });
+}
+
+function createWireMaterial(
+  sourceMaterial: THREE.Material | THREE.Material[] | undefined,
+  colorMode: ColorMode,
+  overlapBlending: OverlapBlending,
+): THREE.MeshBasicMaterial {
+  if (colorMode === "texture") {
+    const src = firstMaterial(sourceMaterial ?? []);
+    if (src) {
+      const mat = createTexturedSolidMaterial(src);
+      mat.wireframe = true;
+      return mat;
+    }
+  }
+  return new THREE.MeshBasicMaterial({
+    color: WIRE_COLOR,
+    wireframe: true,
+    toneMapped: false,
+    ...overlapBlending,
+  });
+}
+
+function createSolidOverlayMaterials(
+  sourceMaterial: THREE.Material | THREE.Material[],
+  colorMode: ColorMode,
+  overlapBlending: OverlapBlending,
+): THREE.Material | THREE.Material[] {
+  if (colorMode === "texture") {
+    const clones = materialList(sourceMaterial).map((mat) =>
+      createTexturedSolidMaterial(mat),
+    );
+    return clones.length === 1 ? clones[0]! : clones;
+  }
+  return new THREE.MeshBasicMaterial({
+    color: SOLID_COLOR,
+    toneMapped: false,
+    ...overlapBlending,
+  });
+}
+
+/** Base solid: keep lit MTL/GLTF materials (Phong/Standard) like obj_origin_modifier. */
+function cloneSolidBaseMaterials(
+  sourceMaterial: THREE.Material | THREE.Material[],
+  colorMode: ColorMode,
+): THREE.Material | THREE.Material[] {
+  const clones = materialList(sourceMaterial).map((src) => {
+    const clone = src.clone();
+    if ("wireframe" in clone) {
+      (clone as THREE.MeshBasicMaterial).wireframe = false;
+    }
+    if ("map" in clone && clone.map instanceof THREE.Texture) {
+      ensureMapColorSpace(clone.map);
+    }
+    if (colorMode === "texture") {
+      Object.assign(clone, TEXTURE_OPAQUE);
+      return clone;
+    }
+    applyFlatColorMode(clone, colorMode, SOLID_COLOR);
+    return clone;
+  });
+  return clones.length === 1 ? clones[0]! : clones;
+}
+
 function applyDisplayMode(
   root: THREE.Object3D,
   mode: DisplayMode,
   pointSize: number,
   pointDensity: number,
+  mixPointSize: number,
+  mixPointDensity: number,
   lineWidth: number,
-  depthColors: boolean,
+  colorModes: {
+    base: ColorMode;
+    mixWire: ColorMode;
+    mixPoints: ColorMode;
+    mixSolid: ColorMode;
+  },
   depthUniforms: DepthUniforms | null,
   glitch: boolean,
   glitchUniforms: GlitchUniforms | null,
+  textureLook: TextureLookUniforms,
+  mixSolidLook: TextureLookUniforms,
   renderHeight: number,
 ): () => void {
   const originals: Array<{
     object: THREE.Object3D;
     visible: boolean;
+    renderOrder: number;
     material?: THREE.Material | THREE.Material[];
   }> = [];
   const patchedMaterials: THREE.Material[] = [];
@@ -457,18 +664,39 @@ function applyDisplayMode(
 
   root.updateMatrixWorld(true);
 
-  const activeDepth = depthColors ? depthUniforms : null;
   const activeGlitch = glitch ? glitchUniforms : null;
   const baseModeId = displayModeToMixId(mode);
+  const textureInPlay =
+    colorModes.base === "texture" ||
+    (Boolean(activeGlitch) &&
+      (colorModes.mixWire === "texture" ||
+        colorModes.mixPoints === "texture" ||
+        colorModes.mixSolid === "texture"));
+  // When texture is opaque, overlap layers must depth-test or they paint through it
+  const overlapBlending: OverlapBlending = textureInPlay
+    ? OVERLAP_BLENDING_DEPTH
+    : OVERLAP_BLENDING;
 
-  const patch = (mat: THREE.Material, mixLayer: number) => {
-    if (!activeDepth && !activeGlitch) return;
+  const patch = (
+    mat: THREE.Material,
+    mixLayer: number,
+    colorMode: ColorMode,
+  ) => {
+    const layerDepth = colorMode === "depth" ? depthUniforms : null;
+    let layerTex: TextureLookUniforms | null = null;
+    if (mixLayer === MIX_LAYER_SOLID && colorMode !== "depth") {
+      layerTex = mixSolidLook;
+    } else if (colorMode === "texture") {
+      layerTex = textureLook;
+    }
+    if (!layerDepth && !activeGlitch && !layerTex) return;
     patchMaterialEffects(
       mat,
-      activeDepth,
+      layerDepth,
       activeGlitch,
       mixLayer,
       baseModeId,
+      layerTex,
     );
     patchedMaterials.push(mat);
   };
@@ -477,12 +705,14 @@ function applyDisplayMode(
     source: THREE.Object3D,
     geometry: THREE.BufferGeometry,
     material: THREE.PointsMaterial,
+    renderOrder = OVERLAP_RENDER_ORDER,
   ) => {
     const points = new THREE.Points(geometry, material);
     const parent = source.parent ?? root;
     points.position.copy(source.position);
     points.quaternion.copy(source.quaternion);
     points.scale.copy(source.scale);
+    points.renderOrder = renderOrder;
     parent.add(points);
     createdPoints.push(points);
     return points;
@@ -491,13 +721,15 @@ function applyDisplayMode(
   const addMeshMatching = (
     source: THREE.Object3D,
     geometry: THREE.BufferGeometry,
-    material: THREE.Material,
+    material: THREE.Material | THREE.Material[],
+    renderOrder = OVERLAP_RENDER_ORDER,
   ) => {
     const mesh = new THREE.Mesh(geometry, material);
     const parent = source.parent ?? root;
     mesh.position.copy(source.position);
     mesh.quaternion.copy(source.quaternion);
     mesh.scale.copy(source.scale);
+    mesh.renderOrder = renderOrder;
     parent.add(mesh);
     createdMeshes.push(mesh);
     return mesh;
@@ -507,26 +739,67 @@ function applyDisplayMode(
     source: THREE.Object3D,
     geometry: THREE.BufferGeometry,
     mixLayer: number,
+    colorMode: ColorMode,
+    sourceMaterial?: THREE.Material | THREE.Material[],
   ) => {
     const position = geometry.getAttribute("position");
     if (!position) return;
+    const isMixPoints = mixLayer === MIX_LAYER_POINTS;
+    const layerPointSize = isMixPoints ? mixPointSize : pointSize;
+    const layerPointDensity = isMixPoints ? mixPointDensity : pointDensity;
     const pointsGeo = new THREE.BufferGeometry();
     pointsGeo.setAttribute(
       "position",
-      subsamplePositionAttribute(position, pointDensity),
+      subsamplePositionAttribute(position, layerPointDensity),
     );
-    const baseSize = clampPointSizeSetting(pointSize);
+    const colorAttr = geometry.getAttribute("color");
+    if (colorMode === "texture" && colorAttr) {
+      pointsGeo.setAttribute(
+        "color",
+        subsamplePositionAttribute(colorAttr, layerPointDensity),
+      );
+    }
+    const baseSize = clampPointSizeSetting(layerPointSize);
+    const src = firstMaterial(sourceMaterial ?? []);
+    const map =
+      colorMode === "texture" &&
+      src &&
+      "map" in src &&
+      src.map instanceof THREE.Texture
+        ? src.map
+        : null;
+    if (map) ensureMapColorSpace(map);
+    const useVertexColors = colorMode === "texture" && Boolean(colorAttr);
+    const srcColor =
+      colorMode === "texture" &&
+      src &&
+      "color" in src &&
+      src.color instanceof THREE.Color
+        ? src.color.getHex()
+        : POINT_COLOR;
+    const isTexture = colorMode === "texture";
     const pointsMat = new THREE.PointsMaterial({
-      color: POINT_COLOR,
+      color: isTexture
+        ? useVertexColors || map
+          ? 0xffffff
+          : srcColor
+        : POINT_COLOR,
+      map,
+      vertexColors: useVertexColors,
       size: resolvePointPixelSize(baseSize, renderHeight),
       sizeAttenuation: false,
-      toneMapped: false,
-      ...OVERLAP_BLENDING,
+      toneMapped: isTexture,
+      ...(isTexture ? TEXTURE_OPAQUE : overlapBlending),
     });
     pointsMat.userData.basePointSize = baseSize;
     createdMaterials.push(pointsMat);
-    patch(pointsMat, mixLayer);
-    addPointsMatching(source, pointsGeo, pointsMat);
+    patch(pointsMat, mixLayer, colorMode);
+    addPointsMatching(
+      source,
+      pointsGeo,
+      pointsMat,
+      isTexture ? TEXTURE_RENDER_ORDER : OVERLAP_RENDER_ORDER,
+    );
   };
 
   root.traverse((child) => {
@@ -538,104 +811,153 @@ function applyDisplayMode(
     }
 
     if (child instanceof THREE.Mesh) {
+      const originalMaterial = child.material;
       originals.push({
         object: child,
         visible: child.visible,
-        material: child.material,
+        renderOrder: child.renderOrder,
+        material: originalMaterial,
       });
 
       if (mode === "wireframe") {
         child.visible = true;
-        const wireMat = new THREE.MeshBasicMaterial({
-          color: WIRE_COLOR,
-          wireframe: true,
-          toneMapped: false,
-          ...OVERLAP_BLENDING,
-        });
+        const wireMat = createWireMaterial(
+          originalMaterial,
+          colorModes.base,
+          overlapBlending,
+        );
         createdMaterials.push(wireMat);
-        patch(wireMat, MIX_LAYER_BASE);
+        patch(wireMat, MIX_LAYER_BASE, colorModes.base);
         child.material = wireMat;
+        child.renderOrder =
+          colorModes.base === "texture"
+            ? TEXTURE_RENDER_ORDER
+            : OVERLAP_RENDER_ORDER;
       } else if (mode === "solid") {
         child.visible = true;
-        const mats = Array.isArray(child.material)
-          ? child.material
-          : [child.material];
-        for (const mat of mats) {
-          if (
-            mat instanceof THREE.MeshBasicMaterial ||
-            mat instanceof THREE.MeshStandardMaterial ||
-            mat instanceof THREE.MeshPhongMaterial ||
-            mat instanceof THREE.MeshLambertMaterial
-          ) {
-            mat.wireframe = false;
-            if (!("map" in mat && mat.map)) {
-              mat.color?.setHex(SOLID_COLOR);
-            }
-            patch(mat, MIX_LAYER_BASE);
-          }
+        const solidMats = cloneSolidBaseMaterials(
+          originalMaterial,
+          colorModes.base,
+        );
+        for (const mat of materialList(solidMats)) {
+          createdMaterials.push(mat);
+          patch(mat, MIX_LAYER_BASE, colorModes.base);
         }
+        child.material = solidMats;
+        child.renderOrder =
+          colorModes.base === "texture"
+            ? TEXTURE_RENDER_ORDER
+            : OVERLAP_RENDER_ORDER;
       } else if (mode === "points") {
         child.visible = false;
-        makePointsFrom(child, child.geometry, MIX_LAYER_BASE);
+        makePointsFrom(
+          child,
+          child.geometry,
+          MIX_LAYER_BASE,
+          colorModes.base,
+          originalMaterial,
+        );
       }
 
-      // Glitch mix overlays for the other display modes
       if (glitch && activeGlitch) {
         if (mode !== "wireframe") {
-          const wireMat = new THREE.MeshBasicMaterial({
-            color: WIRE_COLOR,
-            wireframe: true,
-            toneMapped: false,
-            ...OVERLAP_BLENDING,
-          });
+          const wireMat = createWireMaterial(
+            originalMaterial,
+            colorModes.mixWire,
+            overlapBlending,
+          );
           createdMaterials.push(wireMat);
-          patch(wireMat, MIX_LAYER_WIRE);
-          addMeshMatching(child, child.geometry, wireMat);
+          patch(wireMat, MIX_LAYER_WIRE, colorModes.mixWire);
+          addMeshMatching(
+            child,
+            child.geometry,
+            wireMat,
+            colorModes.mixWire === "texture"
+              ? TEXTURE_RENDER_ORDER
+              : OVERLAP_RENDER_ORDER,
+          );
         }
         if (mode !== "solid") {
-          const solidMat = new THREE.MeshBasicMaterial({
-            color: SOLID_COLOR,
-            toneMapped: false,
-            ...OVERLAP_BLENDING,
-          });
-          createdMaterials.push(solidMat);
-          patch(solidMat, MIX_LAYER_SOLID);
-          addMeshMatching(child, child.geometry, solidMat);
+          const solidMats = createSolidOverlayMaterials(
+            originalMaterial,
+            colorModes.mixSolid,
+            overlapBlending,
+          );
+          for (const mat of materialList(solidMats)) {
+            createdMaterials.push(mat);
+            patch(mat, MIX_LAYER_SOLID, colorModes.mixSolid);
+          }
+          addMeshMatching(
+            child,
+            child.geometry,
+            solidMats,
+            colorModes.mixSolid === "texture"
+              ? TEXTURE_RENDER_ORDER
+              : OVERLAP_RENDER_ORDER,
+          );
         }
         if (mode !== "points") {
-          makePointsFrom(child, child.geometry, MIX_LAYER_POINTS);
+          makePointsFrom(
+            child,
+            child.geometry,
+            MIX_LAYER_POINTS,
+            colorModes.mixPoints,
+            originalMaterial,
+          );
         }
       }
     } else if (
       child instanceof THREE.LineSegments ||
       child instanceof THREE.Line
     ) {
+      const originalMaterial = child.material;
       originals.push({
         object: child,
         visible: child.visible,
-        material: child.material,
+        renderOrder: child.renderOrder,
+        material: originalMaterial,
       });
       child.visible = mode !== "points";
       if (mode === "points") {
-        makePointsFrom(child, child.geometry, MIX_LAYER_BASE);
+        makePointsFrom(
+          child,
+          child.geometry,
+          MIX_LAYER_BASE,
+          colorModes.base,
+          originalMaterial,
+        );
       } else if (mode === "wireframe") {
         const lineMat = new THREE.LineBasicMaterial({
-          color: WIRE_COLOR,
+          color: colorModes.base === "texture" ? 0xffffff : WIRE_COLOR,
           linewidth: lineWidth,
-          toneMapped: false,
-          ...OVERLAP_BLENDING,
+          toneMapped: colorModes.base === "texture",
+          ...(colorModes.base === "texture"
+            ? TEXTURE_OPAQUE
+            : overlapBlending),
         });
         createdMaterials.push(lineMat);
-        patch(lineMat, MIX_LAYER_BASE);
+        patch(lineMat, MIX_LAYER_BASE, colorModes.base);
         child.material = lineMat;
+        child.renderOrder =
+          colorModes.base === "texture"
+            ? TEXTURE_RENDER_ORDER
+            : OVERLAP_RENDER_ORDER;
       } else if (child.material instanceof THREE.LineBasicMaterial) {
-        child.material.color.setHex(WIRE_COLOR);
+        if (colorModes.base !== "texture") {
+          child.material.color.setHex(WIRE_COLOR);
+        }
         child.material.linewidth = lineWidth;
-        patch(child.material, MIX_LAYER_BASE);
+        patch(child.material, MIX_LAYER_BASE, colorModes.base);
       }
 
       if (glitch && activeGlitch && mode !== "points") {
-        makePointsFrom(child, child.geometry, MIX_LAYER_POINTS);
+        makePointsFrom(
+          child,
+          child.geometry,
+          MIX_LAYER_POINTS,
+          colorModes.mixPoints,
+          originalMaterial,
+        );
       }
     }
   });
@@ -644,8 +966,9 @@ function applyDisplayMode(
     for (const mat of patchedMaterials) {
       clearEffectPatch(mat);
     }
-    for (const { object, visible, material } of originals) {
+    for (const { object, visible, renderOrder, material } of originals) {
       object.visible = visible;
+      object.renderOrder = renderOrder;
       if (material !== undefined) {
         if (object instanceof THREE.Mesh) {
           object.material = material;
@@ -670,11 +993,9 @@ function applyDisplayMode(
     for (const points of createdPoints) {
       points.parent?.remove(points);
       points.geometry.dispose();
-      // Materials disposed via createdMaterials
     }
     for (const mesh of createdMeshes) {
       mesh.parent?.remove(mesh);
-      // Geometry is shared with source — do not dispose
       if (Array.isArray(mesh.material)) {
         mesh.material.forEach((m) => {
           if (!createdMaterials.includes(m)) m.dispose();
@@ -701,6 +1022,14 @@ export default function LoadedModel({
   const { camera, size, gl } = useThree();
   const depthUniformsRef = useRef(createDepthUniforms());
   const glitchUniformsRef = useRef(createGlitchUniforms());
+  const textureLookRef = useRef<TextureLookUniforms>({
+    uTexBright: { value: 1 },
+    uTexContrast: { value: 1 },
+  });
+  const mixSolidLookRef = useRef<TextureLookUniforms>({
+    uTexBright: { value: 1 },
+    uTexContrast: { value: 1 },
+  });
   const sphereRef = useRef(new THREE.Sphere());
   const boxRef = useRef(new THREE.Box3());
   const cornerRef = useRef(new THREE.Vector3());
@@ -741,8 +1070,9 @@ export default function LoadedModel({
   useEffect(() => {
     const root = groupRef.current;
     if (!root) return;
+    const depthActive = usesDepthColor(settings);
     root.name = "iso-model-root";
-    root.userData.depthUniforms = settings.depthColors
+    root.userData.depthUniforms = depthActive
       ? depthUniformsRef.current
       : null;
     root.userData.glitchUniforms = settings.glitch
@@ -750,19 +1080,43 @@ export default function LoadedModel({
       : null;
     onExportRoot?.(root);
     return () => onExportRoot?.(null);
-  }, [cloned, settings.depthColors, settings.glitch, onExportRoot]);
+  }, [cloned, settings, onExportRoot]);
 
   useEffect(() => {
+    const hasTextures = Boolean(cloned.userData.hasTextures);
+    const colorModes = {
+      base: resolveColorMode(settings.colorMode, hasTextures),
+      mixWire: resolveColorMode(settings.glitchMixWireColor, hasTextures),
+      mixPoints: resolveColorMode(settings.glitchMixPointsColor, hasTextures),
+      mixSolid: resolveColorMode(settings.glitchMixSolidColor, hasTextures),
+    };
+    const depthActive = usesDepthColor({
+      ...settings,
+      colorMode: colorModes.base,
+      glitchMixWireColor: colorModes.mixWire,
+      glitchMixPointsColor: colorModes.mixPoints,
+      glitchMixSolidColor: colorModes.mixSolid,
+    });
+    textureLookRef.current.uTexBright.value = settings.textureBrightness;
+    textureLookRef.current.uTexContrast.value = settings.textureContrast;
+    mixSolidLookRef.current.uTexBright.value =
+      settings.glitchMixSolidBrightness;
+    mixSolidLookRef.current.uTexContrast.value =
+      settings.glitchMixSolidContrast;
     const cleanup = applyDisplayMode(
       cloned,
       settings.displayMode,
       settings.pointSize,
       settings.pointDensity,
+      settings.glitchMixPointsSize,
+      settings.glitchMixPointsDensity,
       settings.lineWidth,
-      settings.depthColors,
-      settings.depthColors ? depthUniformsRef.current : null,
+      colorModes,
+      depthActive ? depthUniformsRef.current : null,
       settings.glitch,
       settings.glitch ? glitchUniformsRef.current : null,
+      textureLookRef.current,
+      mixSolidLookRef.current,
       Math.max(1, size.height * gl.getPixelRatio()),
     );
     return cleanup;
@@ -773,13 +1127,25 @@ export default function LoadedModel({
     settings.displayMode,
     settings.pointSize,
     settings.pointDensity,
+    settings.glitchMixPointsSize,
+    settings.glitchMixPointsDensity,
     settings.lineWidth,
-    settings.depthColors,
+    settings.colorMode,
+    settings.glitchMixWireColor,
+    settings.glitchMixPointsColor,
+    settings.glitchMixSolidColor,
     settings.glitch,
   ]);
 
   useFrame((_state, delta) => {
     if (recording || !groupRef.current) return;
+
+    textureLookRef.current.uTexBright.value = settings.textureBrightness;
+    textureLookRef.current.uTexContrast.value = settings.textureContrast;
+    mixSolidLookRef.current.uTexBright.value =
+      settings.glitchMixSolidBrightness;
+    mixSolidLookRef.current.uTexContrast.value =
+      settings.glitchMixSolidContrast;
 
     syncPointSizesForResolution(
       groupRef.current,
@@ -800,7 +1166,7 @@ export default function LoadedModel({
       syncGlitchUniforms(glitchUniformsRef.current, settings, t);
     }
 
-    if (settings.depthColors) {
+    if (usesDepthColor(settings)) {
       const depthUniforms = depthUniformsRef.current;
       depthUniforms.uInvertDepth.value = settings.invertDepthColors ? 1 : 0;
 

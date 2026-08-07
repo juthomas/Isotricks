@@ -7,6 +7,7 @@ import * as THREE from "three";
 import LoadedModel from "./LoadedModel";
 import ExportProgressOverlay from "./ExportProgressOverlay";
 import type { ModelSettings } from "@/lib/types";
+import { usesDepthColor } from "@/lib/types";
 import type { ExportModelSource } from "@/lib/exportScene";
 import { captureOrthoCameraState } from "@/lib/exportScene";
 
@@ -217,7 +218,7 @@ function ExportBridge({
       const s = settingsRef.current;
       return {
         modelRoot,
-        depthUniforms: s.depthColors
+        depthUniforms: usesDepthColor(s)
           ? ((modelRoot.userData
               .depthUniforms as ExportModelSource["depthUniforms"]) ?? null)
           : null,
@@ -410,10 +411,29 @@ export default function IsoViewer({
               onExportReady={onExportReady}
             />
             <ambientLight
-              intensity={settings.displayMode === "solid" ? 0.85 : 1}
+              intensity={
+                settings.displayMode === "solid" &&
+                settings.colorMode === "texture"
+                  ? 0.55
+                  : settings.displayMode === "solid"
+                    ? 0.85
+                    : 1
+              }
             />
             {settings.displayMode === "solid" && (
-              <directionalLight position={[4, 6, 2]} intensity={0.45} />
+              <>
+                <directionalLight
+                  position={
+                    settings.colorMode === "texture" ? [5, 8, 4] : [4, 6, 2]
+                  }
+                  intensity={
+                    settings.colorMode === "texture" ? 1.1 : 0.45
+                  }
+                />
+                {settings.colorMode === "texture" && (
+                  <directionalLight position={[-4, 2, -3]} intensity={0.35} />
+                )}
+              </>
             )}
             <IsoCamera
               angleX={settings.angleX}
