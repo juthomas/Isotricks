@@ -67,6 +67,7 @@ function loadObjectSettings(objectKey: string): ObjectSettings {
       depthColors: _dc,
       invertDepthColors: _i,
       pointSize: _p,
+      pointDensity: _pd,
       lineWidth: _l,
       ...objectOnly
     } = saved as Partial<ObjectSettings> & Partial<GlobalViewSettings>;
@@ -74,6 +75,7 @@ function loadObjectSettings(objectKey: string): ObjectSettings {
     void _dc;
     void _i;
     void _p;
+    void _pd;
     void _l;
     return { ...DEFAULT_OBJECT_SETTINGS, ...objectOnly };
   } catch {
@@ -167,6 +169,7 @@ export function pickGlobalView(settings: ModelSettings): GlobalViewSettings {
     depthColors: settings.depthColors,
     invertDepthColors: settings.invertDepthColors,
     pointSize: settings.pointSize,
+    pointDensity: settings.pointDensity,
     lineWidth: settings.lineWidth,
     autoCycle: settings.autoCycle,
     autoCycleSeconds: settings.autoCycleSeconds,

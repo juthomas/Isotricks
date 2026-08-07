@@ -130,10 +130,37 @@ function clearDepthPatch(material: THREE.Material): void {
   material.needsUpdate = true;
 }
 
+/** Evenly spaced subset of positions (stable as density changes). */
+function subsamplePositionAttribute(
+  position: THREE.BufferAttribute | THREE.InterleavedBufferAttribute,
+  densityPct: number,
+): THREE.BufferAttribute {
+  const count = position.count;
+  const itemSize = position.itemSize;
+  const density = Math.min(100, Math.max(0, densityPct)) / 100;
+  const keep = Math.floor(count * density);
+  if (keep <= 0) {
+    return new THREE.BufferAttribute(new Float32Array(0), itemSize);
+  }
+  if (keep >= count) {
+    return position.clone() as THREE.BufferAttribute;
+  }
+
+  const arr = new Float32Array(keep * itemSize);
+  for (let i = 0; i < keep; i++) {
+    const src = Math.min(count - 1, Math.floor((i * count) / keep));
+    for (let c = 0; c < itemSize; c++) {
+      arr[i * itemSize + c] = position.getComponent(src, c);
+    }
+  }
+  return new THREE.BufferAttribute(arr, itemSize);
+}
+
 function applyDisplayMode(
   root: THREE.Object3D,
   mode: DisplayMode,
   pointSize: number,
+  pointDensity: number,
   lineWidth: number,
   depthColors: boolean,
   depthUniforms: DepthUniforms | null,
@@ -220,7 +247,10 @@ function applyDisplayMode(
         const position = child.geometry.getAttribute("position");
         if (position) {
           const pointsGeo = new THREE.BufferGeometry();
-          pointsGeo.setAttribute("position", position.clone());
+          pointsGeo.setAttribute(
+            "position",
+            subsamplePositionAttribute(position, pointDensity),
+          );
           const pointsMat = new THREE.PointsMaterial({
             color: POINT_COLOR,
             // Orthographic camera: size in screen pixels (attenuation breaks sizing)
@@ -247,7 +277,10 @@ function applyDisplayMode(
         const position = child.geometry.getAttribute("position");
         if (position) {
           const pointsGeo = new THREE.BufferGeometry();
-          pointsGeo.setAttribute("position", position.clone());
+          pointsGeo.setAttribute(
+            "position",
+            subsamplePositionAttribute(position, pointDensity),
+          );
           const pointsMat = new THREE.PointsMaterial({
             color: POINT_COLOR,
             size: Math.min(10, Math.max(1, pointSize)),
@@ -349,6 +382,7 @@ export default function LoadedModel({
       cloned,
       settings.displayMode,
       settings.pointSize,
+      settings.pointDensity,
       settings.lineWidth,
       settings.depthColors,
       settings.depthColors ? depthUniformsRef.current : null,
@@ -358,6 +392,7 @@ export default function LoadedModel({
     cloned,
     settings.displayMode,
     settings.pointSize,
+    settings.pointDensity,
     settings.lineWidth,
     settings.depthColors,
   ]);

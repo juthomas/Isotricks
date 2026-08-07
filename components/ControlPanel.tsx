@@ -83,6 +83,36 @@ function SliderRow({
   );
 }
 
+/** Log slider domain: 0 → 0%, else [DENSITY_LOG_MIN, 100] on a log scale. */
+const DENSITY_SLIDER_MAX = 1000;
+const DENSITY_LOG_MIN = 0.01;
+
+function densityToSliderPos(density: number): number {
+  if (density <= 0) return 0;
+  const d = Math.min(100, Math.max(DENSITY_LOG_MIN, density));
+  const t =
+    (Math.log(d) - Math.log(DENSITY_LOG_MIN)) /
+    (Math.log(100) - Math.log(DENSITY_LOG_MIN));
+  return Math.round(Math.min(1, Math.max(0, t)) * DENSITY_SLIDER_MAX);
+}
+
+function sliderPosToDensity(pos: number): number {
+  if (pos <= 0) return 0;
+  const t = Math.min(1, pos / DENSITY_SLIDER_MAX);
+  const d = Math.exp(
+    Math.log(DENSITY_LOG_MIN) +
+      t * (Math.log(100) - Math.log(DENSITY_LOG_MIN)),
+  );
+  return Math.min(100, d);
+}
+
+function formatPointDensity(density: number): string {
+  if (density <= 0) return "0%";
+  if (density < 1) return `${density.toFixed(2)}%`;
+  if (density < 10) return `${density.toFixed(1)}%`;
+  return `${Math.round(density)}%`;
+}
+
 const MODES: { id: DisplayMode; label: string }[] = [
   { id: "wireframe", label: "Wireframe" },
   { id: "points", label: "Points" },
@@ -352,6 +382,17 @@ export default function ControlPanel({
                 step={0.1}
                 display={`${settings.pointSize.toFixed(1)}px`}
                 onChange={(pointSize) => onSettingsChange({ pointSize })}
+              />
+              <SliderRow
+                label="Point density"
+                value={densityToSliderPos(settings.pointDensity)}
+                min={0}
+                max={DENSITY_SLIDER_MAX}
+                step={1}
+                display={formatPointDensity(settings.pointDensity)}
+                onChange={(pos) =>
+                  onSettingsChange({ pointDensity: sliderPosToDensity(pos) })
+                }
               />
             </div>
           )}

@@ -114,6 +114,46 @@ function yieldToMain(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/** AVC codec strings with level high enough for the given resolution. */
+function avcCodecsForSize(width: number, height: number): string[] {
+  const longSide = Math.max(width, height);
+  const pixels = width * height;
+
+  // Level ladder (hex level_idc): 1e≈3.0, 1f≈3.1, 28≈4.0, 29≈4.1, 32≈5.0, 33≈5.1, 34≈5.2
+  if (longSide <= 1280 && pixels <= 1280 * 720) {
+    return ["avc1.42001f", "avc1.4d001f", "avc1.64001f"];
+  }
+  if (longSide <= 1920 && pixels <= 1920 * 1088) {
+    return [
+      "avc1.4d0028",
+      "avc1.640028",
+      "avc1.4d0029",
+      "avc1.640029",
+      "avc1.42001f",
+    ];
+  }
+  // 4K / up to 3840
+  return [
+    "avc1.640032",
+    "avc1.4d0032",
+    "avc1.640033",
+    "avc1.4d0033",
+    "avc1.640034",
+    "avc1.4d0034",
+    "avc1.640028",
+    "avc1.4d0028",
+  ];
+}
+
+function bitrateForSize(width: number, height: number): number {
+  const pixels = width * height;
+  // ~6 bits/pixel/frame @ 30fps → bits/s; floor for SD, headroom for 4K
+  const estimated = Math.round(pixels * 6 * EXPORT_FPS * 0.15);
+  if (pixels >= 3840 * 2000) return Math.min(40_000_000, Math.max(25_000_000, estimated));
+  if (pixels >= 1920 * 1000) return Math.min(20_000_000, Math.max(8_000_000, estimated));
+  return Math.min(8_000_000, Math.max(2_000_000, estimated));
+}
+
 async function pickAvcConfig(
   width: number,
   height: number,
@@ -123,42 +163,62 @@ async function pickAvcConfig(
       "WebCodecs VideoEncoder is not available — use Chrome, Edge, or Safari",
     );
   }
-  const bitrate = Math.round(Math.min(20_000_000, width * height * 6));
-  const candidates: VideoEncoderConfig[] = [
-    {
-      codec: "avc1.640028",
-      width,
-      height,
-      bitrate,
-      framerate: EXPORT_FPS,
-      avc: { format: "avc" },
-    },
-    {
-      codec: "avc1.4d4028",
-      width,
-      height,
-      bitrate,
-      framerate: EXPORT_FPS,
-      avc: { format: "avc" },
-    },
-    {
-      codec: "avc1.42001f",
-      width,
-      height,
-      bitrate,
-      framerate: EXPORT_FPS,
-      avc: { format: "avc" },
-    },
+
+  const bitrate = bitrateForSize(width, height);
+  const codecs = avcCodecsForSize(width, height);
+  const accelerations: HardwareAcceleration[] = [
+    "prefer-hardware",
+    "prefer-software",
+    "no-preference",
   ];
-  for (const config of candidates) {
-    try {
-      const support = await VideoEncoder.isConfigSupported(config);
-      if (support.supported) return support.config ?? config;
-    } catch {
-      // try next
+
+  for (const codec of codecs) {
+    for (const hardwareAcceleration of accelerations) {
+      const config: VideoEncoderConfig = {
+        codec,
+        width,
+        height,
+        bitrate,
+        framerate: EXPORT_FPS,
+        hardwareAcceleration,
+        avc: { format: "avc" },
+        latencyMode: "quality",
+      };
+      try {
+        const support = await VideoEncoder.isConfigSupported(config);
+        if (support.supported) {
+          return { ...config, ...(support.config ?? {}) };
+        }
+      } catch {
+        // try next
+      }
     }
   }
-  throw new Error("H.264 encoding is not supported in this browser");
+
+  throw new Error(
+    `H.264 encoding is not supported for ${width}×${height} in this browser (try a smaller resolution, or update Chrome)`,
+  );
+}
+
+async function waitForEncodeQueue(
+  encoder: VideoEncoder,
+  maxQueue: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  while (encoder.encodeQueueSize > maxQueue) {
+    if (signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+    await new Promise<void>((resolve) => {
+      const prev = encoder.ondequeue;
+      encoder.ondequeue = () => {
+        encoder.ondequeue = prev;
+        resolve();
+      };
+      // Fallback if ondequeue never fires
+      window.setTimeout(resolve, 16);
+    });
+  }
 }
 
 async function pickAacConfig(
@@ -323,6 +383,8 @@ export async function exportOfflineMp4(
 
       renderer.render(scene, camera);
 
+      await waitForEncodeQueue(videoEncoder, 4, signal);
+
       const frame = new VideoFrame(canvas, {
         timestamp: i * frameDurationUs,
         duration: frameDurationUs,
@@ -334,6 +396,7 @@ export async function exportOfflineMp4(
       if (i % 2 === 0) await yieldToMain();
     }
 
+    await waitForEncodeQueue(videoEncoder, 0, signal);
     await videoEncoder.flush();
     videoEncoder.close();
 

@@ -8,6 +8,8 @@ export type GlobalViewSettings = {
   depthColors: boolean;
   invertDepthColors: boolean;
   pointSize: number;
+  /** Percent of vertices to draw as points (0–100) */
+  pointDensity: number;
   lineWidth: number;
   /** Cycle through built-in demos automatically */
   autoCycle: boolean;
@@ -33,6 +35,7 @@ export const GLOBAL_VIEW_KEYS = [
   "depthColors",
   "invertDepthColors",
   "pointSize",
+  "pointDensity",
   "lineWidth",
   "autoCycle",
   "autoCycleSeconds",
@@ -124,6 +127,7 @@ export const DEFAULT_GLOBAL_VIEW: GlobalViewSettings = {
   depthColors: false,
   invertDepthColors: false,
   pointSize: 2,
+  pointDensity: 100,
   lineWidth: 1,
   autoCycle: false,
   autoCycleSeconds: 8,
