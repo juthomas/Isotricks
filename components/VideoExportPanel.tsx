@@ -18,6 +18,7 @@ const PRESETS: { label: string; width: number; height: number }[] = [
   { label: "1920×1080", width: 1920, height: 1080 },
   { label: "1080×1920", width: 1080, height: 1920 },
   { label: "4K", width: 3840, height: 2160 },
+  { label: "4K vertical", width: 2160, height: 3840 },
 ];
 
 export default function VideoExportPanel({
