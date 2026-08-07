@@ -210,6 +210,34 @@ function ExportBridge({
           ? ((modelRoot.userData
               .depthUniforms as ExportModelSource["depthUniforms"]) ?? null)
           : null,
+        glitchUniforms: s.glitch
+          ? ((modelRoot.userData
+              .glitchUniforms as ExportModelSource["glitchUniforms"]) ?? null)
+          : null,
+        glitchSettings: s.glitch
+          ? {
+              glitchSpeed: s.glitchSpeed,
+              glitchMixCellSize: s.glitchMixCellSize,
+              glitchDigitalMin: s.glitchDigitalMin,
+              glitchDigitalMax: s.glitchDigitalMax,
+              glitchDeformMin: s.glitchDeformMin,
+              glitchDeformMax: s.glitchDeformMax,
+              glitchScatterMin: s.glitchScatterMin,
+              glitchScatterMax: s.glitchScatterMax,
+              glitchTwistMin: s.glitchTwistMin,
+              glitchTwistMax: s.glitchTwistMax,
+              glitchTpMin: s.glitchTpMin,
+              glitchTpMax: s.glitchTpMax,
+              glitchChromaMin: s.glitchChromaMin,
+              glitchChromaMax: s.glitchChromaMax,
+              glitchMixWireMin: s.glitchMixWireMin,
+              glitchMixWireMax: s.glitchMixWireMax,
+              glitchMixPointsMin: s.glitchMixPointsMin,
+              glitchMixPointsMax: s.glitchMixPointsMax,
+              glitchMixSolidMin: s.glitchMixSolidMin,
+              glitchMixSolidMax: s.glitchMixSolidMax,
+            }
+          : null,
         invertDepthColors: s.invertDepthColors,
         camera: captureOrthoCameraState(camera),
         rotationDirection: s.rotationDirection,

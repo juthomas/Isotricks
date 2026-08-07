@@ -42,13 +42,272 @@ export function subscribeSettings(onStoreChange: () => void): () => void {
   };
 }
 
+function clamp01(n: number): number {
+  return Math.min(1, Math.max(0, n));
+}
+
+/** Convert legacy single intensity / boolean into min=max range. */
+function legacyToRange(
+  value: unknown,
+  fallback: number,
+  glitchMode: unknown,
+  modeName: string,
+  legacyAmt: number,
+): { min: number; max: number } {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const v = clamp01(value);
+    return { min: v, max: v };
+  }
+  if (typeof value === "boolean") {
+    const v = value ? clamp01(legacyAmt) : 0;
+    return { min: v, max: v };
+  }
+  if (typeof glitchMode === "string") {
+    const on =
+      glitchMode === modeName ||
+      (glitchMode === "twist" && (modeName === "twist" || modeName === "tp"));
+    const v = on ? clamp01(legacyAmt) : 0;
+    return { min: v, max: v };
+  }
+  const v = clamp01(fallback);
+  return { min: v, max: v };
+}
+
+function readRange(
+  parsed: Record<string, unknown>,
+  minKey: string,
+  maxKey: string,
+  legacyKey: string,
+  modeName: string,
+  legacyAmt: number,
+  defaults: { min: number; max: number },
+): { min: number; max: number } {
+  const minRaw = parsed[minKey];
+  const maxRaw = parsed[maxKey];
+  if (
+    typeof minRaw === "number" &&
+    typeof maxRaw === "number" &&
+    Number.isFinite(minRaw) &&
+    Number.isFinite(maxRaw)
+  ) {
+    const a = clamp01(minRaw);
+    const b = clamp01(maxRaw);
+    return { min: Math.min(a, b), max: Math.max(a, b) };
+  }
+  return legacyToRange(
+    parsed[legacyKey],
+    defaults.min,
+    parsed.glitchMode,
+    modeName,
+    legacyAmt,
+  );
+}
+
 function loadGlobalView(): GlobalViewSettings {
   if (!canUseStorage()) return { ...DEFAULT_GLOBAL_VIEW };
   try {
     const raw = localStorage.getItem(GLOBAL_VIEW_STORAGE_KEY);
     if (!raw) return { ...DEFAULT_GLOBAL_VIEW };
-    const parsed = JSON.parse(raw) as Partial<GlobalViewSettings>;
-    return { ...DEFAULT_GLOBAL_VIEW, ...parsed };
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const legacyAmt =
+      typeof parsed.glitchIntensity === "number"
+        ? parsed.glitchIntensity
+        : 0.55;
+
+    const digital = readRange(
+      parsed,
+      "glitchDigitalMin",
+      "glitchDigitalMax",
+      "glitchDigital",
+      "digital",
+      legacyAmt,
+      {
+        min: DEFAULT_GLOBAL_VIEW.glitchDigitalMin,
+        max: DEFAULT_GLOBAL_VIEW.glitchDigitalMax,
+      },
+    );
+    const deform = readRange(
+      parsed,
+      "glitchDeformMin",
+      "glitchDeformMax",
+      "glitchDeform",
+      "deform",
+      legacyAmt,
+      {
+        min: DEFAULT_GLOBAL_VIEW.glitchDeformMin,
+        max: DEFAULT_GLOBAL_VIEW.glitchDeformMax,
+      },
+    );
+    const scatter = readRange(
+      parsed,
+      "glitchScatterMin",
+      "glitchScatterMax",
+      "glitchScatter",
+      "scatter",
+      legacyAmt,
+      {
+        min: DEFAULT_GLOBAL_VIEW.glitchScatterMin,
+        max: DEFAULT_GLOBAL_VIEW.glitchScatterMax,
+      },
+    );
+    const twist = readRange(
+      parsed,
+      "glitchTwistMin",
+      "glitchTwistMax",
+      "glitchTwist",
+      "twist",
+      legacyAmt,
+      {
+        min: DEFAULT_GLOBAL_VIEW.glitchTwistMin,
+        max: DEFAULT_GLOBAL_VIEW.glitchTwistMax,
+      },
+    );
+    const tp = readRange(
+      parsed,
+      "glitchTpMin",
+      "glitchTpMax",
+      "glitchTp",
+      "tp",
+      legacyAmt,
+      { min: DEFAULT_GLOBAL_VIEW.glitchTpMin, max: DEFAULT_GLOBAL_VIEW.glitchTpMax },
+    );
+    const chroma = readRange(
+      parsed,
+      "glitchChromaMin",
+      "glitchChromaMax",
+      "glitchChroma",
+      "chroma",
+      legacyAmt,
+      {
+        min: DEFAULT_GLOBAL_VIEW.glitchChromaMin,
+        max: DEFAULT_GLOBAL_VIEW.glitchChromaMax,
+      },
+    );
+    const mixWire = readRange(
+      parsed,
+      "glitchMixWireMin",
+      "glitchMixWireMax",
+      "glitchMixWire",
+      "mixWire",
+      legacyAmt,
+      {
+        min: DEFAULT_GLOBAL_VIEW.glitchMixWireMin,
+        max: DEFAULT_GLOBAL_VIEW.glitchMixWireMax,
+      },
+    );
+    const mixPoints = readRange(
+      parsed,
+      "glitchMixPointsMin",
+      "glitchMixPointsMax",
+      "glitchMixPoints",
+      "mixPoints",
+      legacyAmt,
+      {
+        min: DEFAULT_GLOBAL_VIEW.glitchMixPointsMin,
+        max: DEFAULT_GLOBAL_VIEW.glitchMixPointsMax,
+      },
+    );
+    const mixSolid = readRange(
+      parsed,
+      "glitchMixSolidMin",
+      "glitchMixSolidMax",
+      "glitchMixSolid",
+      "mixSolid",
+      legacyAmt,
+      {
+        min: DEFAULT_GLOBAL_VIEW.glitchMixSolidMin,
+        max: DEFAULT_GLOBAL_VIEW.glitchMixSolidMax,
+      },
+    );
+
+    const {
+      glitchMode: _gm,
+      glitchIntensity: _gi,
+      glitchDigital: _gd,
+      glitchDeform: _gde,
+      glitchScatter: _gsc,
+      glitchTwist: _gtw,
+      glitchTp: _gtp,
+      glitchChroma: _gch,
+      glitchDigitalMin: _dmin,
+      glitchDigitalMax: _dmax,
+      glitchDeformMin: _demin,
+      glitchDeformMax: _demax,
+      glitchScatterMin: _scmin,
+      glitchScatterMax: _scmax,
+      glitchTwistMin: _twmin,
+      glitchTwistMax: _twmax,
+      glitchTpMin: _tpmin,
+      glitchTpMax: _tpmax,
+      glitchChromaMin: _chmin,
+      glitchChromaMax: _chmax,
+      glitchMixWireMin: _mwmin,
+      glitchMixWireMax: _mwmax,
+      glitchMixPointsMin: _mpmin,
+      glitchMixPointsMax: _mpmax,
+      glitchMixSolidMin: _msmin,
+      glitchMixSolidMax: _msmax,
+      ...rest
+    } = parsed;
+    void _gm;
+    void _gi;
+    void _gd;
+    void _gde;
+    void _gsc;
+    void _gtw;
+    void _gtp;
+    void _gch;
+    void _dmin;
+    void _dmax;
+    void _demin;
+    void _demax;
+    void _scmin;
+    void _scmax;
+    void _twmin;
+    void _twmax;
+    void _tpmin;
+    void _tpmax;
+    void _chmin;
+    void _chmax;
+    void _mwmin;
+    void _mwmax;
+    void _mpmin;
+    void _mpmax;
+    void _msmin;
+    void _msmax;
+
+    return {
+      ...DEFAULT_GLOBAL_VIEW,
+      ...(rest as Partial<GlobalViewSettings>),
+      glitchDigitalMin: digital.min,
+      glitchDigitalMax: digital.max,
+      glitchDeformMin: deform.min,
+      glitchDeformMax: deform.max,
+      glitchScatterMin: scatter.min,
+      glitchScatterMax: scatter.max,
+      glitchTwistMin: twist.min,
+      glitchTwistMax: twist.max,
+      glitchTpMin: tp.min,
+      glitchTpMax: tp.max,
+      glitchChromaMin: chroma.min,
+      glitchChromaMax: chroma.max,
+      glitchMixWireMin: mixWire.min,
+      glitchMixWireMax: mixWire.max,
+      glitchMixPointsMin: mixPoints.min,
+      glitchMixPointsMax: mixPoints.max,
+      glitchMixSolidMin: mixSolid.min,
+      glitchMixSolidMax: mixSolid.max,
+      glitchSpeed:
+        typeof parsed.glitchSpeed === "number" &&
+        Number.isFinite(parsed.glitchSpeed)
+          ? Math.min(3, Math.max(0, parsed.glitchSpeed))
+          : DEFAULT_GLOBAL_VIEW.glitchSpeed,
+      glitchMixCellSize:
+        typeof parsed.glitchMixCellSize === "number" &&
+        Number.isFinite(parsed.glitchMixCellSize)
+          ? Math.min(5, Math.max(0.02, parsed.glitchMixCellSize))
+          : DEFAULT_GLOBAL_VIEW.glitchMixCellSize,
+    };
   } catch {
     return { ...DEFAULT_GLOBAL_VIEW };
   }
@@ -66,18 +325,41 @@ function loadObjectSettings(objectKey: string): ObjectSettings {
       displayMode: _d,
       depthColors: _dc,
       invertDepthColors: _i,
+      glitch: _g,
+      glitchSpeed: _gs,
+      glitchDigital: _gd,
+      glitchDeform: _gde,
+      glitchScatter: _gsc,
+      glitchTwist: _gtw,
+      glitchTp: _gtp,
+      glitchChroma: _gch,
+      glitchMode: _gm,
+      glitchIntensity: _gi,
       pointSize: _p,
       pointDensity: _pd,
       lineWidth: _l,
       ...objectOnly
-    } = saved as Partial<ObjectSettings> & Partial<GlobalViewSettings>;
+    } = saved as Record<string, unknown>;
     void _d;
     void _dc;
     void _i;
+    void _g;
+    void _gs;
+    void _gd;
+    void _gde;
+    void _gsc;
+    void _gtw;
+    void _gtp;
+    void _gch;
+    void _gm;
+    void _gi;
     void _p;
     void _pd;
     void _l;
-    return { ...DEFAULT_OBJECT_SETTINGS, ...objectOnly };
+    return {
+      ...DEFAULT_OBJECT_SETTINGS,
+      ...(objectOnly as Partial<ObjectSettings>),
+    };
   } catch {
     return { ...DEFAULT_OBJECT_SETTINGS };
   }
@@ -168,6 +450,27 @@ export function pickGlobalView(settings: ModelSettings): GlobalViewSettings {
     displayMode: settings.displayMode,
     depthColors: settings.depthColors,
     invertDepthColors: settings.invertDepthColors,
+    glitch: settings.glitch,
+    glitchSpeed: settings.glitchSpeed,
+    glitchMixCellSize: settings.glitchMixCellSize,
+    glitchDigitalMin: settings.glitchDigitalMin,
+    glitchDigitalMax: settings.glitchDigitalMax,
+    glitchDeformMin: settings.glitchDeformMin,
+    glitchDeformMax: settings.glitchDeformMax,
+    glitchScatterMin: settings.glitchScatterMin,
+    glitchScatterMax: settings.glitchScatterMax,
+    glitchTwistMin: settings.glitchTwistMin,
+    glitchTwistMax: settings.glitchTwistMax,
+    glitchTpMin: settings.glitchTpMin,
+    glitchTpMax: settings.glitchTpMax,
+    glitchChromaMin: settings.glitchChromaMin,
+    glitchChromaMax: settings.glitchChromaMax,
+    glitchMixWireMin: settings.glitchMixWireMin,
+    glitchMixWireMax: settings.glitchMixWireMax,
+    glitchMixPointsMin: settings.glitchMixPointsMin,
+    glitchMixPointsMax: settings.glitchMixPointsMax,
+    glitchMixSolidMin: settings.glitchMixSolidMin,
+    glitchMixSolidMax: settings.glitchMixSolidMax,
     pointSize: settings.pointSize,
     pointDensity: settings.pointDensity,
     lineWidth: settings.lineWidth,
@@ -213,7 +516,7 @@ export function saveLastSource(source: {
     const payload: PersistedSource = { kind: source.kind, id: source.id };
     localStorage.setItem(LAST_SOURCE_STORAGE_KEY, JSON.stringify(payload));
   } catch {
-    // Ignore quota / private mode errors
+    // Ignore
   }
 }
 
@@ -224,6 +527,7 @@ export function loadLastSource(): PersistedSource | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PersistedSource;
     if (
+      parsed &&
       (parsed.kind === "demo" || parsed.kind === "file") &&
       typeof parsed.id === "string"
     ) {

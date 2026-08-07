@@ -10,6 +10,7 @@ import type {
   ObjectSource,
   RotationDirection,
 } from "@/lib/types";
+import { GLITCH_EFFECTS } from "@/lib/types";
 import type { UserModelMeta } from "@/lib/userModels";
 import type { VideoExportControls } from "@/hooks/useVideoExport";
 
@@ -111,6 +112,118 @@ function formatPointDensity(density: number): string {
   if (density < 1) return `${density.toFixed(2)}%`;
   if (density < 10) return `${density.toFixed(1)}%`;
   return `${Math.round(density)}%`;
+}
+
+/** Log intensity: down to 0.01%, up to 100%. */
+const GLITCH_INTENSITY_SLIDER_MAX = 1000;
+const GLITCH_INTENSITY_LOG_MIN = 0.0001;
+
+function intensityToSliderPos(intensity: number): number {
+  if (intensity <= 0) return 0;
+  const d = Math.min(1, Math.max(GLITCH_INTENSITY_LOG_MIN, intensity));
+  const t =
+    (Math.log(d) - Math.log(GLITCH_INTENSITY_LOG_MIN)) /
+    (Math.log(1) - Math.log(GLITCH_INTENSITY_LOG_MIN));
+  return Math.round(Math.min(1, Math.max(0, t)) * GLITCH_INTENSITY_SLIDER_MAX);
+}
+
+function sliderPosToIntensity(pos: number): number {
+  if (pos <= 0) return 0;
+  const t = Math.min(1, pos / GLITCH_INTENSITY_SLIDER_MAX);
+  const d = Math.exp(
+    Math.log(GLITCH_INTENSITY_LOG_MIN) +
+      t * (Math.log(1) - Math.log(GLITCH_INTENSITY_LOG_MIN)),
+  );
+  return Math.min(1, d);
+}
+
+function formatGlitchIntensity(intensity: number): string {
+  if (intensity <= 0) return "0%";
+  const pct = intensity * 100;
+  if (pct < 0.1) return `${pct.toFixed(2)}%`;
+  if (pct < 1) return `${pct.toFixed(2)}%`;
+  if (pct < 10) return `${pct.toFixed(1)}%`;
+  return `${Math.round(pct)}%`;
+}
+
+/** Dual-thumb range on one track (log-mapped positions). */
+function DualLogRangeRow({
+  label,
+  minValue,
+  maxValue,
+  onChange,
+}: {
+  label: string;
+  minValue: number;
+  maxValue: number;
+  onChange: (min: number, max: number) => void;
+}) {
+  const minPos = intensityToSliderPos(minValue);
+  const maxPos = intensityToSliderPos(maxValue);
+  const lo = Math.min(minPos, maxPos);
+  const hi = Math.max(minPos, maxPos);
+  const pctLo = (lo / GLITCH_INTENSITY_SLIDER_MAX) * 100;
+  const pctHi = (hi / GLITCH_INTENSITY_SLIDER_MAX) * 100;
+
+  const thumbClass =
+    "pointer-events-none absolute inset-0 h-6 w-full appearance-none bg-transparent " +
+    "[&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:relative " +
+    "[&::-webkit-slider-thumb]:z-10 [&::-webkit-slider-thumb]:size-3.5 " +
+    "[&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none " +
+    "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-indigo-400 " +
+    "[&::-webkit-slider-thumb]:shadow [&::-webkit-slider-runnable-track]:appearance-none " +
+    "[&::-webkit-slider-runnable-track]:bg-transparent " +
+    "[&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:size-3.5 " +
+    "[&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full " +
+    "[&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-indigo-400 " +
+    "[&::-moz-range-track]:bg-transparent";
+
+  return (
+    <div className="block space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-zinc-400">{label}</span>
+        <span className="font-mono text-zinc-300">
+          {formatGlitchIntensity(Math.min(minValue, maxValue))} –{" "}
+          {formatGlitchIntensity(Math.max(minValue, maxValue))}
+        </span>
+      </div>
+      <div className="relative h-6">
+        <div className="pointer-events-none absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-zinc-700" />
+        <div
+          className="pointer-events-none absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-indigo-500/70"
+          style={{ left: `${pctLo}%`, width: `${Math.max(0, pctHi - pctLo)}%` }}
+        />
+        <input
+          type="range"
+          min={0}
+          max={GLITCH_INTENSITY_SLIDER_MAX}
+          step={1}
+          value={minPos}
+          aria-label={`${label} min`}
+          onChange={(e) => {
+            const nextMin = sliderPosToIntensity(Number(e.target.value));
+            onChange(Math.min(nextMin, maxValue), Math.max(nextMin, maxValue));
+          }}
+          className={thumbClass}
+          style={{ zIndex: minPos > maxPos - 40 ? 4 : 2 }}
+        />
+        <input
+          type="range"
+          min={0}
+          max={GLITCH_INTENSITY_SLIDER_MAX}
+          step={1}
+          value={maxPos}
+          aria-label={`${label} max`}
+          onChange={(e) => {
+            const nextMax = sliderPosToIntensity(Number(e.target.value));
+            onChange(Math.min(minValue, nextMax), Math.max(minValue, nextMax));
+          }}
+          className={thumbClass}
+          style={{ zIndex: 3 }}
+        />
+      </div>
+    </div>
+  );
 }
 
 const MODES: { id: DisplayMode; label: string }[] = [
@@ -263,6 +376,53 @@ export default function ControlPanel({
                     <span>{farLabel}</span>
                   </div>
                 </div>
+              </div>
+            )}
+            <label className="flex items-center justify-between text-xs text-zinc-400">
+              <span>Glitch</span>
+              <input
+                type="checkbox"
+                checked={settings.glitch}
+                onChange={(e) => onSettingsChange({ glitch: e.target.checked })}
+                className="size-4 accent-indigo-500"
+              />
+            </label>
+            {settings.glitch && (
+              <div className="space-y-3">
+                <SliderRow
+                  label="Glitch speed"
+                  value={settings.glitchSpeed}
+                  min={0}
+                  max={3}
+                  step={0.01}
+                  display={`${settings.glitchSpeed.toFixed(2)}×`}
+                  onChange={(glitchSpeed) => onSettingsChange({ glitchSpeed })}
+                />
+                <SliderRow
+                  label="Mix cell size"
+                  value={settings.glitchMixCellSize}
+                  min={0.05}
+                  max={3}
+                  step={0.01}
+                  display={settings.glitchMixCellSize.toFixed(2)}
+                  onChange={(glitchMixCellSize) =>
+                    onSettingsChange({ glitchMixCellSize })
+                  }
+                />
+                {GLITCH_EFFECTS.map((fx) => (
+                  <DualLogRangeRow
+                    key={fx.id}
+                    label={fx.label}
+                    minValue={settings[fx.minKey]}
+                    maxValue={settings[fx.maxKey]}
+                    onChange={(min, max) =>
+                      onSettingsChange({
+                        [fx.minKey]: min,
+                        [fx.maxKey]: max,
+                      })
+                    }
+                  />
+                ))}
               </div>
             )}
             <label className="flex items-center justify-between text-xs text-zinc-400">

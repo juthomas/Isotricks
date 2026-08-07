@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { GlitchRuntimeUniforms, GlobalViewSettings } from "@/lib/types";
 
 export type ExportCameraState = {
   position: THREE.Vector3;
@@ -11,6 +12,30 @@ export type ExportCameraState = {
   far: number;
 };
 
+export type ExportGlitchSettings = Pick<
+  GlobalViewSettings,
+  | "glitchSpeed"
+  | "glitchMixCellSize"
+  | "glitchDigitalMin"
+  | "glitchDigitalMax"
+  | "glitchDeformMin"
+  | "glitchDeformMax"
+  | "glitchScatterMin"
+  | "glitchScatterMax"
+  | "glitchTwistMin"
+  | "glitchTwistMax"
+  | "glitchTpMin"
+  | "glitchTpMax"
+  | "glitchChromaMin"
+  | "glitchChromaMax"
+  | "glitchMixWireMin"
+  | "glitchMixWireMax"
+  | "glitchMixPointsMin"
+  | "glitchMixPointsMax"
+  | "glitchMixSolidMin"
+  | "glitchMixSolidMax"
+>;
+
 export type ExportModelSource = {
   /** Live model root (materials already applied by LoadedModel). */
   modelRoot: THREE.Object3D;
@@ -19,6 +44,8 @@ export type ExportModelSource = {
     uMaxDepth: { value: number };
     uInvertDepth: { value: number };
   } | null;
+  glitchUniforms: GlitchRuntimeUniforms | null;
+  glitchSettings: ExportGlitchSettings | null;
   invertDepthColors: boolean;
   /** Live camera pose (includes orbit), not just settings sliders. */
   camera: ExportCameraState;

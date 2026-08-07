@@ -6,6 +6,7 @@ import {
   updateExportDepthUniforms,
   type ExportModelSource,
 } from "@/lib/exportScene";
+import { syncGlitchUniforms } from "@/lib/types";
 
 export const EXPORT_FPS = 30;
 export const EXPORT_MIN_SIZE = 256;
@@ -378,6 +379,14 @@ export async function exportOfflineMp4(
           camera,
           source.depthUniforms,
           source.invertDepthColors,
+        );
+      }
+
+      if (source.glitchUniforms && source.glitchSettings) {
+        syncGlitchUniforms(
+          source.glitchUniforms,
+          source.glitchSettings,
+          i / EXPORT_FPS,
         );
       }
 
