@@ -494,7 +494,11 @@ export async function exportOfflinePng(options: {
     }
 
     if (source.glitchUniforms && source.glitchSettings) {
-      syncGlitchUniforms(source.glitchUniforms, source.glitchSettings, 0);
+      syncGlitchUniforms(
+        source.glitchUniforms,
+        source.glitchSettings,
+        source.sceneTime,
+      );
     }
 
     renderer.render(scene, camera);

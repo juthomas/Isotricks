@@ -13,6 +13,7 @@ import {
 import { useLoadedObject } from "@/hooks/useLoadedObject";
 import { useModelSettings } from "@/hooks/useModelSettings";
 import { useVideoExport } from "@/hooks/useVideoExport";
+import { useSceneClock } from "@/hooks/useSceneClock";
 import { DEFAULT_DEMO_ID, type DemoId, type ObjectSource } from "@/lib/types";
 import type { ExportModelSource } from "@/lib/exportScene";
 import {
@@ -98,6 +99,7 @@ export default function HomeClient() {
 
   const { settings, setSettings, resetSettings } = useModelSettings(objectKey);
   const loadState = useLoadedObject(source);
+  const sceneClock = useSceneClock();
   const exportSourceRef = useRef<(() => ExportModelSource | null) | null>(null);
 
   const onExportReady = useCallback(
@@ -365,6 +367,8 @@ export default function HomeClient() {
           previewFrame={videoExport.previewFrame}
           exportWidth={videoExport.width}
           exportHeight={videoExport.height}
+          advanceSceneTime={sceneClock.advance}
+          getSceneTime={sceneClock.getSceneTime}
           onExportReady={onExportReady}
           loading={loadState.status === "loading"}
           error={immersive ? null : loadState.error}
@@ -415,6 +419,7 @@ export default function HomeClient() {
           panelOpen={panelOpen}
           savedModels={savedModels}
           videoExport={videoExport}
+          sceneClock={sceneClock}
           onTogglePanel={() => setPanelOverride(!panelOpen)}
           onSelectDemo={onSelectDemo}
           onFile={onFile}

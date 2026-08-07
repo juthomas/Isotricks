@@ -15,6 +15,8 @@ import { GLITCH_EFFECTS } from "@/lib/types";
 import { downloadSettingsFile, readSettingsFile } from "@/lib/settingsIO";
 import type { UserModelMeta } from "@/lib/userModels";
 import type { VideoExportControls } from "@/hooks/useVideoExport";
+import type { SceneClock } from "@/hooks/useSceneClock";
+import { SCENE_TIME_LOOP } from "@/hooks/useSceneClock";
 
 type ControlPanelProps = {
   source: ObjectSource;
@@ -22,6 +24,7 @@ type ControlPanelProps = {
   panelOpen: boolean;
   savedModels: UserModelMeta[];
   videoExport: VideoExportControls;
+  sceneClock: SceneClock;
   onTogglePanel: () => void;
   onSelectDemo: (id: DemoId) => void;
   onFile: (file: File) => void;
@@ -50,6 +53,18 @@ function GearIcon({ className }: { className?: string }) {
   );
 }
 
+function formatNumberInputValue(value: number, step: number): string {
+  if (!Number.isFinite(value)) return "0";
+  if (step >= 1) return String(Math.round(value));
+  const decimals = Math.min(
+    8,
+    Math.max(0, -Math.floor(Math.log10(step) + 1e-12)),
+  );
+  // Trim trailing zeros but keep enough precision for tiny steps
+  const fixed = value.toFixed(decimals);
+  return fixed.replace(/\.?0+$/, "") || "0";
+}
+
 function SliderRow({
   label,
   value,
@@ -58,6 +73,13 @@ function SliderRow({
   step,
   display,
   onChange,
+  numberInput = true,
+  /** When set, range track uses mapped positions; number field still edits `value`. */
+  toSliderPos,
+  fromSliderPos,
+  sliderMin = 0,
+  sliderMax = 1000,
+  sliderStep = 1,
 }: {
   label: string;
   value: number;
@@ -66,23 +88,79 @@ function SliderRow({
   step: number;
   display?: string;
   onChange: (v: number) => void;
+  numberInput?: boolean;
+  toSliderPos?: (v: number) => number;
+  fromSliderPos?: (pos: number) => number;
+  sliderMin?: number;
+  sliderMax?: number;
+  sliderStep?: number;
 }) {
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  const mapped = Boolean(toSliderPos && fromSliderPos);
+  const rangeMin = mapped ? sliderMin : min;
+  const rangeMax = mapped ? sliderMax : max;
+  const rangeStep = mapped ? sliderStep : step;
+  const rangeValue = mapped ? toSliderPos!(value) : value;
+
+  const commitDraft = () => {
+    const parsed = Number.parseFloat(draft);
+    if (Number.isFinite(parsed)) {
+      const clamped = Math.min(max, Math.max(min, parsed));
+      onChange(clamped);
+    }
+    setFocused(false);
+  };
+
   return (
-    <label className="block space-y-1.5">
-      <div className="flex items-center justify-between text-xs">
+    <div className="block space-y-1.5">
+      <div className="flex items-center justify-between gap-2 text-xs">
         <span className="text-zinc-400">{label}</span>
-        <span className="font-mono text-zinc-300">{display ?? value.toFixed(2)}</span>
+        {numberInput ? (
+          <input
+            type="text"
+            inputMode="decimal"
+            aria-label={label}
+            value={focused ? draft : formatNumberInputValue(value, step)}
+            onFocus={() => {
+              setFocused(true);
+              setDraft(formatNumberInputValue(value, step));
+            }}
+            onChange={(e) =>
+              setDraft(e.target.value.replace(/[^\d.eE+-]/g, ""))
+            }
+            onBlur={commitDraft}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.currentTarget.blur();
+              }
+            }}
+            className="w-[5.5rem] shrink-0 rounded-md bg-zinc-900 px-1.5 py-0.5 text-right font-mono text-xs text-zinc-200 ring-1 ring-zinc-700 outline-none focus:ring-indigo-500"
+          />
+        ) : (
+          <span className="font-mono text-zinc-300">
+            {display ?? formatNumberInputValue(value, step)}
+          </span>
+        )}
       </div>
       <input
         type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
+        min={rangeMin}
+        max={rangeMax}
+        step={rangeStep}
+        value={rangeValue}
+        onChange={(e) => {
+          const raw = Number(e.target.value);
+          if (mapped && fromSliderPos) onChange(fromSliderPos(raw));
+          else onChange(raw);
+        }}
         className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 accent-indigo-500"
       />
-    </label>
+      {numberInput && display && (
+        <p className="text-[10px] text-zinc-600">{display}</p>
+      )}
+    </div>
   );
 }
 
@@ -107,13 +185,6 @@ function sliderPosToDensity(pos: number): number {
       t * (Math.log(100) - Math.log(DENSITY_LOG_MIN)),
   );
   return Math.min(100, d);
-}
-
-function formatPointDensity(density: number): string {
-  if (density <= 0) return "0%";
-  if (density < 1) return `${density.toFixed(2)}%`;
-  if (density < 10) return `${density.toFixed(1)}%`;
-  return `${Math.round(density)}%`;
 }
 
 /** Log intensity: down to 0.01%, up to 100%. */
@@ -299,6 +370,7 @@ export default function ControlPanel({
   panelOpen,
   savedModels,
   videoExport,
+  sceneClock,
   onTogglePanel,
   onSelectDemo,
   onFile,
@@ -315,6 +387,7 @@ export default function ControlPanel({
   const [settingsIoMessage, setSettingsIoMessage] = useState<string | null>(
     null,
   );
+  const loopPos = sceneClock.sceneTime % SCENE_TIME_LOOP;
 
   const handleImportSettings = async (file: File | null) => {
     if (!file) return;
@@ -470,6 +543,7 @@ export default function ControlPanel({
                   max={CELL_SIZE_SLIDER_MAX}
                   step={1}
                   display={formatCellSize(settings.glitchMixCellSize)}
+                  numberInput={false}
                   onChange={(pos) =>
                     onSettingsChange({
                       glitchMixCellSize: sliderPosToCellSize(pos),
@@ -520,6 +594,37 @@ export default function ControlPanel({
                 }
               />
             )}
+          </div>
+
+          <div className="space-y-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Time
+            </h2>
+            <button
+              type="button"
+              onClick={() => sceneClock.setPlaying(!sceneClock.playing)}
+              className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-zinc-200 ring-1 ring-zinc-700 transition-colors hover:bg-zinc-800"
+            >
+              {sceneClock.playing ? "Pause" : "Play"}
+            </button>
+            {!sceneClock.playing && (
+              <SliderRow
+                label="Scrub (s)"
+                value={loopPos}
+                min={0}
+                max={SCENE_TIME_LOOP}
+                step={0.01}
+                onChange={(pos) => sceneClock.scrubLoopPosition(pos)}
+              />
+            )}
+            <SliderRow
+              label="Time scale"
+              value={settings.timeScale}
+              min={0.00001}
+              max={4}
+              step={0.00001}
+              onChange={(timeScale) => onSettingsChange({ timeScale })}
+            />
           </div>
 
           <div className="space-y-3">
@@ -578,7 +683,6 @@ export default function ControlPanel({
               min={-89}
               max={89}
               step={0.1}
-              display={`${settings.angleX.toFixed(1)}°`}
               onChange={(angleX) => onSettingsChange({ angleX })}
             />
             <SliderRow
@@ -587,7 +691,6 @@ export default function ControlPanel({
               min={-180}
               max={180}
               step={0.1}
-              display={`${settings.angleY.toFixed(1)}°`}
               onChange={(angleY) => onSettingsChange({ angleY })}
             />
             <SliderRow
@@ -611,18 +714,22 @@ export default function ControlPanel({
                 min={1}
                 max={10}
                 step={0.1}
-                display={`${settings.pointSize.toFixed(1)} @1080p`}
+                display="@1080p reference"
                 onChange={(pointSize) => onSettingsChange({ pointSize })}
               />
               <SliderRow
-                label="Point density"
-                value={densityToSliderPos(settings.pointDensity)}
+                label="Point density (%)"
+                value={settings.pointDensity}
                 min={0}
-                max={DENSITY_SLIDER_MAX}
-                step={1}
-                display={formatPointDensity(settings.pointDensity)}
-                onChange={(pos) =>
-                  onSettingsChange({ pointDensity: sliderPosToDensity(pos) })
+                max={100}
+                step={0.01}
+                toSliderPos={densityToSliderPos}
+                fromSliderPos={sliderPosToDensity}
+                sliderMin={0}
+                sliderMax={DENSITY_SLIDER_MAX}
+                sliderStep={1}
+                onChange={(pointDensity) =>
+                  onSettingsChange({ pointDensity })
                 }
               />
             </div>

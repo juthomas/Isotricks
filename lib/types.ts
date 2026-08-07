@@ -57,6 +57,8 @@ export type GlobalViewSettings = {
   autoCycle: boolean;
   /** Seconds between model changes */
   autoCycleSeconds: number;
+  /** Multiplier for scene clock (glitch + auto-rotate) */
+  timeScale: number;
 };
 
 /** Per-object camera / motion prefs */
@@ -223,6 +225,7 @@ export const GLOBAL_VIEW_KEYS = [
   "lineWidth",
   "autoCycle",
   "autoCycleSeconds",
+  "timeScale",
 ] as const satisfies readonly (keyof GlobalViewSettings)[];
 
 export const OBJECT_SETTING_KEYS = [
@@ -344,6 +347,7 @@ export const DEFAULT_GLOBAL_VIEW: GlobalViewSettings = {
   lineWidth: 1,
   autoCycle: false,
   autoCycleSeconds: 8,
+  timeScale: 1,
 };
 
 export const DEFAULT_OBJECT_SETTINGS: ObjectSettings = {

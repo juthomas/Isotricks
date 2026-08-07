@@ -59,6 +59,8 @@ export type ExportModelSource = {
   camera: ExportCameraState;
   rotationDirection: 1 | -1 | 0;
   displayMode: "wireframe" | "points" | "solid";
+  /** Scene clock time used for glitch (photo export). */
+  sceneTime: number;
 };
 
 /** Clone hierarchy but share geometries + materials (keeps depth shader uniforms). */

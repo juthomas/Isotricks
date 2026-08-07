@@ -54,6 +54,7 @@ function pickKnownSettings(raw: Record<string, unknown>): ModelSettings {
   next.pointSize = clamp(next.pointSize, 1, 10);
   next.lineWidth = clamp(next.lineWidth, 0.5, 10);
   next.autoCycleSeconds = clamp(next.autoCycleSeconds, 1, 120);
+  next.timeScale = clamp(next.timeScale, 0.00001, 4);
   next.rotationSpeed = clamp(next.rotationSpeed, 0, 5);
   next.zoom = clamp(next.zoom, 0.1, 10);
 

@@ -35,6 +35,8 @@ type LoadedModelProps = {
   settings: ModelSettings;
   /** When true, skip useFrame updates so offline export owns time/rotation. */
   recording?: boolean;
+  advanceSceneTime?: (delta: number, timeScale: number) => number;
+  getSceneTime?: () => number;
   onExportRoot?: (root: THREE.Object3D | null) => void;
 };
 
@@ -691,6 +693,8 @@ export default function LoadedModel({
   object,
   settings,
   recording = false,
+  advanceSceneTime,
+  getSceneTime,
   onExportRoot,
 }: LoadedModelProps) {
   const groupRef = useRef<THREE.Group>(null);
@@ -701,8 +705,38 @@ export default function LoadedModel({
   const boxRef = useRef(new THREE.Box3());
   const cornerRef = useRef(new THREE.Vector3());
   const viewMatrixRef = useRef(new THREE.Matrix4());
+  const baseYawRef = useRef(0);
+  const autoRotatePrevRef = useRef(settings.autoRotate);
 
   const cloned = useMemo(() => object.clone(true), [object]);
+
+  // Reset yaw baseline when the model instance changes
+  useEffect(() => {
+    baseYawRef.current = 0;
+    autoRotatePrevRef.current = settings.autoRotate;
+  }, [cloned]);
+
+  // When enabling auto-rotate, lock baseline so pose doesn't jump
+  useEffect(() => {
+    const root = groupRef.current;
+    if (!root) return;
+    if (settings.autoRotate && !autoRotatePrevRef.current) {
+      const t = getSceneTime?.() ?? 0;
+      const dir = settings.rotationDirection;
+      if (dir !== 0) {
+        baseYawRef.current =
+          root.rotation.y - dir * settings.rotationSpeed * t;
+      } else {
+        baseYawRef.current = root.rotation.y;
+      }
+    }
+    autoRotatePrevRef.current = settings.autoRotate;
+  }, [
+    settings.autoRotate,
+    settings.rotationDirection,
+    settings.rotationSpeed,
+    getSceneTime,
+  ]);
 
   useEffect(() => {
     const root = groupRef.current;
@@ -744,7 +778,7 @@ export default function LoadedModel({
     settings.glitch,
   ]);
 
-  useFrame((state, delta) => {
+  useFrame((_state, delta) => {
     if (recording || !groupRef.current) return;
 
     syncPointSizesForResolution(
@@ -752,17 +786,18 @@ export default function LoadedModel({
       Math.max(1, size.height * gl.getPixelRatio()),
     );
 
+    const t = advanceSceneTime
+      ? advanceSceneTime(delta, settings.timeScale)
+      : (getSceneTime?.() ?? 0);
+
     if (settings.autoRotate && settings.rotationDirection !== 0) {
-      groupRef.current.rotation.y +=
-        settings.rotationDirection * settings.rotationSpeed * delta;
+      groupRef.current.rotation.y =
+        baseYawRef.current +
+        settings.rotationDirection * settings.rotationSpeed * t;
     }
 
     if (settings.glitch) {
-      syncGlitchUniforms(
-        glitchUniformsRef.current,
-        settings,
-        state.clock.elapsedTime,
-      );
+      syncGlitchUniforms(glitchUniformsRef.current, settings, t);
     }
 
     if (settings.depthColors) {

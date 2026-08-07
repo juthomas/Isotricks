@@ -504,6 +504,7 @@ export function pickGlobalView(settings: ModelSettings): GlobalViewSettings {
     lineWidth: settings.lineWidth,
     autoCycle: settings.autoCycle,
     autoCycleSeconds: settings.autoCycleSeconds,
+    timeScale: settings.timeScale,
   };
 }
 

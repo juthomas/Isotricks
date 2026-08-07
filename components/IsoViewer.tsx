@@ -24,6 +24,8 @@ type IsoViewerProps = {
   previewFrame?: boolean;
   exportWidth?: number;
   exportHeight?: number;
+  advanceSceneTime?: (delta: number, timeScale: number) => number;
+  getSceneTime?: () => number;
   onExportReady?: (getSource: (() => ExportModelSource | null) | null) => void;
 };
 
@@ -191,10 +193,12 @@ function SafeOrbitControls({
 function ExportBridge({
   settings,
   modelRootRef,
+  getSceneTime,
   onExportReady,
 }: {
   settings: ModelSettings;
   modelRootRef: MutableRefObject<THREE.Object3D | null>;
+  getSceneTime?: () => number;
   onExportReady?: (getSource: (() => ExportModelSource | null) | null) => void;
 }) {
   const { camera } = useThree();
@@ -257,10 +261,11 @@ function ExportBridge({
         camera: captureOrthoCameraState(camera),
         rotationDirection: s.rotationDirection,
         displayMode: s.displayMode,
+        sceneTime: getSceneTime?.() ?? 0,
       };
     });
     return () => onExportReady(null);
-  }, [onExportReady, modelRootRef, camera]);
+  }, [onExportReady, modelRootRef, camera, getSceneTime]);
 
   return null;
 }
@@ -277,6 +282,8 @@ export default function IsoViewer({
   previewFrame = false,
   exportWidth = 1080,
   exportHeight = 1080,
+  advanceSceneTime,
+  getSceneTime,
   onExportReady,
 }: IsoViewerProps) {
   const [showLoading, setShowLoading] = useState(false);
@@ -399,6 +406,7 @@ export default function IsoViewer({
             <ExportBridge
               settings={settings}
               modelRootRef={modelRootRef}
+              getSceneTime={getSceneTime}
               onExportReady={onExportReady}
             />
             <ambientLight
@@ -417,6 +425,8 @@ export default function IsoViewer({
                 object={displayObject}
                 settings={settings}
                 recording={recording}
+                advanceSceneTime={advanceSceneTime}
+                getSceneTime={getSceneTime}
                 onExportRoot={onModelRoot}
               />
             )}
