@@ -611,7 +611,7 @@ export default function ControlPanel({
                 min={1}
                 max={10}
                 step={0.1}
-                display={`${settings.pointSize.toFixed(1)}px`}
+                display={`${settings.pointSize.toFixed(1)} @1080p`}
                 onChange={(pointSize) => onSettingsChange({ pointSize })}
               />
               <SliderRow

@@ -6,6 +6,7 @@ import {
   updateExportDepthUniforms,
   type ExportModelSource,
 } from "@/lib/exportScene";
+import { syncPointSizesForResolution } from "@/lib/pointSize";
 import { syncGlitchUniforms } from "@/lib/types";
 
 export const EXPORT_FPS = 30;
@@ -362,6 +363,7 @@ export async function exportOfflineMp4(
   renderer.setPixelRatio(1);
   renderer.setSize(width, height, false);
   renderer.setClearColor(0x000000, 1);
+  syncPointSizesForResolution(root, height);
 
   const direction =
     source.rotationDirection === 0 ? 1 : source.rotationDirection;
@@ -479,6 +481,7 @@ export async function exportOfflinePng(options: {
   renderer.setPixelRatio(1);
   renderer.setSize(width, height, false);
   renderer.setClearColor(0x000000, 1);
+  syncPointSizesForResolution(root, height);
 
   try {
     if (source.depthUniforms) {

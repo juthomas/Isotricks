@@ -9,6 +9,11 @@ import {
   type GlitchRuntimeUniforms,
   type ModelSettings,
 } from "@/lib/types";
+import {
+  clampPointSizeSetting,
+  resolvePointPixelSize,
+  syncPointSizesForResolution,
+} from "@/lib/pointSize";
 
 const WIRE_COLOR = 0xa1a1aa;
 const SOLID_COLOR = 0x71717a;
@@ -436,6 +441,7 @@ function applyDisplayMode(
   depthUniforms: DepthUniforms | null,
   glitch: boolean,
   glitchUniforms: GlitchUniforms | null,
+  renderHeight: number,
 ): () => void {
   const originals: Array<{
     object: THREE.Object3D;
@@ -507,13 +513,15 @@ function applyDisplayMode(
       "position",
       subsamplePositionAttribute(position, pointDensity),
     );
+    const baseSize = clampPointSizeSetting(pointSize);
     const pointsMat = new THREE.PointsMaterial({
       color: POINT_COLOR,
-      size: Math.min(10, Math.max(1, pointSize)),
+      size: resolvePointPixelSize(baseSize, renderHeight),
       sizeAttenuation: false,
       toneMapped: false,
       ...OVERLAP_BLENDING,
     });
+    pointsMat.userData.basePointSize = baseSize;
     createdMaterials.push(pointsMat);
     patch(pointsMat, mixLayer);
     addPointsMatching(source, pointsGeo, pointsMat);
@@ -686,7 +694,7 @@ export default function LoadedModel({
   onExportRoot,
 }: LoadedModelProps) {
   const groupRef = useRef<THREE.Group>(null);
-  const { camera } = useThree();
+  const { camera, size, gl } = useThree();
   const depthUniformsRef = useRef(createDepthUniforms());
   const glitchUniformsRef = useRef(createGlitchUniforms());
   const sphereRef = useRef(new THREE.Sphere());
@@ -721,8 +729,11 @@ export default function LoadedModel({
       settings.depthColors ? depthUniformsRef.current : null,
       settings.glitch,
       settings.glitch ? glitchUniformsRef.current : null,
+      Math.max(1, size.height * gl.getPixelRatio()),
     );
     return cleanup;
+    // Resize is handled by syncPointSizesForResolution in useFrame
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- size/dpr only seed initial point size
   }, [
     cloned,
     settings.displayMode,
@@ -735,6 +746,11 @@ export default function LoadedModel({
 
   useFrame((state, delta) => {
     if (recording || !groupRef.current) return;
+
+    syncPointSizesForResolution(
+      groupRef.current,
+      Math.max(1, size.height * gl.getPixelRatio()),
+    );
 
     if (settings.autoRotate && settings.rotationDirection !== 0) {
       groupRef.current.rotation.y +=
