@@ -146,17 +146,48 @@ function formatGlitchIntensity(intensity: number): string {
   return `${Math.round(pct)}%`;
 }
 
-/** Dual-thumb range on one track (log-mapped positions). */
-function DualLogRangeRow({
+/** Mix cell size: log from 0.001 to 3. */
+const CELL_SIZE_SLIDER_MAX = 1000;
+const CELL_SIZE_LOG_MIN = 0.001;
+const CELL_SIZE_LOG_MAX = 3;
+
+function cellSizeToSliderPos(size: number): number {
+  const d = Math.min(CELL_SIZE_LOG_MAX, Math.max(CELL_SIZE_LOG_MIN, size));
+  const t =
+    (Math.log(d) - Math.log(CELL_SIZE_LOG_MIN)) /
+    (Math.log(CELL_SIZE_LOG_MAX) - Math.log(CELL_SIZE_LOG_MIN));
+  return Math.round(Math.min(1, Math.max(0, t)) * CELL_SIZE_SLIDER_MAX);
+}
+
+function sliderPosToCellSize(pos: number): number {
+  const t = Math.min(1, Math.max(0, pos / CELL_SIZE_SLIDER_MAX));
+  return Math.exp(
+    Math.log(CELL_SIZE_LOG_MIN) +
+      t * (Math.log(CELL_SIZE_LOG_MAX) - Math.log(CELL_SIZE_LOG_MIN)),
+  );
+}
+
+function formatCellSize(size: number): string {
+  if (size < 0.01) return size.toFixed(3);
+  if (size < 0.1) return size.toFixed(3);
+  return size.toFixed(2);
+}
+
+/** Effect range + compact inline speed on one block. */
+function GlitchEffectControls({
   label,
   minValue,
   maxValue,
-  onChange,
+  onRangeChange,
+  speed,
+  onSpeedChange,
 }: {
   label: string;
   minValue: number;
   maxValue: number;
-  onChange: (min: number, max: number) => void;
+  onRangeChange: (min: number, max: number) => void;
+  speed: number;
+  onSpeedChange: (speed: number) => void;
 }) {
   const minPos = intensityToSliderPos(minValue);
   const maxPos = intensityToSliderPos(maxValue);
@@ -166,31 +197,47 @@ function DualLogRangeRow({
   const pctHi = (hi / GLITCH_INTENSITY_SLIDER_MAX) * 100;
 
   const thumbClass =
-    "pointer-events-none absolute inset-0 h-6 w-full appearance-none bg-transparent " +
+    "pointer-events-none absolute inset-0 h-5 w-full appearance-none bg-transparent " +
     "[&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:relative " +
-    "[&::-webkit-slider-thumb]:z-10 [&::-webkit-slider-thumb]:size-3.5 " +
+    "[&::-webkit-slider-thumb]:z-10 [&::-webkit-slider-thumb]:size-3 " +
     "[&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none " +
     "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-indigo-400 " +
     "[&::-webkit-slider-thumb]:shadow [&::-webkit-slider-runnable-track]:appearance-none " +
     "[&::-webkit-slider-runnable-track]:bg-transparent " +
-    "[&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:size-3.5 " +
+    "[&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:size-3 " +
     "[&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full " +
     "[&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-indigo-400 " +
     "[&::-moz-range-track]:bg-transparent";
 
   return (
-    <div className="block space-y-1.5">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-zinc-400">{label}</span>
-        <span className="font-mono text-zinc-300">
-          {formatGlitchIntensity(Math.min(minValue, maxValue))} –{" "}
+    <div className="space-y-1">
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-[4.5rem] shrink-0 truncate text-zinc-400">{label}</span>
+        <span className="shrink-0 font-mono text-[10px] tabular-nums text-zinc-500">
+          {formatGlitchIntensity(Math.min(minValue, maxValue))}–
           {formatGlitchIntensity(Math.max(minValue, maxValue))}
         </span>
+        <div className="ml-auto flex min-w-0 max-w-[9.5rem] flex-1 items-center gap-1">
+          <span className="shrink-0 text-[10px] text-zinc-600">spd</span>
+          <input
+            type="range"
+            min={0}
+            max={3}
+            step={0.01}
+            value={speed}
+            aria-label={`${label} speed`}
+            onChange={(e) => onSpeedChange(Number(e.target.value))}
+            className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-zinc-700 accent-indigo-500"
+          />
+          <span className="w-7 shrink-0 text-right font-mono text-[10px] tabular-nums text-zinc-500">
+            {speed.toFixed(1)}×
+          </span>
+        </div>
       </div>
-      <div className="relative h-6">
-        <div className="pointer-events-none absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-zinc-700" />
+      <div className="relative h-5">
+        <div className="pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-zinc-700" />
         <div
-          className="pointer-events-none absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-indigo-500/70"
+          className="pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-indigo-500/70"
           style={{ left: `${pctLo}%`, width: `${Math.max(0, pctHi - pctLo)}%` }}
         />
         <input
@@ -202,7 +249,10 @@ function DualLogRangeRow({
           aria-label={`${label} min`}
           onChange={(e) => {
             const nextMin = sliderPosToIntensity(Number(e.target.value));
-            onChange(Math.min(nextMin, maxValue), Math.max(nextMin, maxValue));
+            onRangeChange(
+              Math.min(nextMin, maxValue),
+              Math.max(nextMin, maxValue),
+            );
           }}
           className={thumbClass}
           style={{ zIndex: minPos > maxPos - 40 ? 4 : 2 }}
@@ -216,7 +266,10 @@ function DualLogRangeRow({
           aria-label={`${label} max`}
           onChange={(e) => {
             const nextMax = sliderPosToIntensity(Number(e.target.value));
-            onChange(Math.min(minValue, nextMax), Math.max(minValue, nextMax));
+            onRangeChange(
+              Math.min(minValue, nextMax),
+              Math.max(minValue, nextMax),
+            );
           }}
           className={thumbClass}
           style={{ zIndex: 3 }}
@@ -388,38 +441,35 @@ export default function ControlPanel({
               />
             </label>
             {settings.glitch && (
-              <div className="space-y-3">
-                <SliderRow
-                  label="Glitch speed"
-                  value={settings.glitchSpeed}
-                  min={0}
-                  max={3}
-                  step={0.01}
-                  display={`${settings.glitchSpeed.toFixed(2)}×`}
-                  onChange={(glitchSpeed) => onSettingsChange({ glitchSpeed })}
-                />
+              <div className="space-y-2">
                 <SliderRow
                   label="Mix cell size"
-                  value={settings.glitchMixCellSize}
-                  min={0.05}
-                  max={3}
-                  step={0.01}
-                  display={settings.glitchMixCellSize.toFixed(2)}
-                  onChange={(glitchMixCellSize) =>
-                    onSettingsChange({ glitchMixCellSize })
+                  value={cellSizeToSliderPos(settings.glitchMixCellSize)}
+                  min={0}
+                  max={CELL_SIZE_SLIDER_MAX}
+                  step={1}
+                  display={formatCellSize(settings.glitchMixCellSize)}
+                  onChange={(pos) =>
+                    onSettingsChange({
+                      glitchMixCellSize: sliderPosToCellSize(pos),
+                    })
                   }
                 />
                 {GLITCH_EFFECTS.map((fx) => (
-                  <DualLogRangeRow
+                  <GlitchEffectControls
                     key={fx.id}
                     label={fx.label}
                     minValue={settings[fx.minKey]}
                     maxValue={settings[fx.maxKey]}
-                    onChange={(min, max) =>
+                    onRangeChange={(min, max) =>
                       onSettingsChange({
                         [fx.minKey]: min,
                         [fx.maxKey]: max,
                       })
+                    }
+                    speed={settings[fx.speedKey]}
+                    onSpeedChange={(speed) =>
+                      onSettingsChange({ [fx.speedKey]: speed })
                     }
                   />
                 ))}

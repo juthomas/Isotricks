@@ -297,16 +297,36 @@ function loadGlobalView(): GlobalViewSettings {
       glitchMixPointsMax: mixPoints.max,
       glitchMixSolidMin: mixSolid.min,
       glitchMixSolidMax: mixSolid.max,
-      glitchSpeed:
-        typeof parsed.glitchSpeed === "number" &&
-        Number.isFinite(parsed.glitchSpeed)
-          ? Math.min(3, Math.max(0, parsed.glitchSpeed))
-          : DEFAULT_GLOBAL_VIEW.glitchSpeed,
       glitchMixCellSize:
         typeof parsed.glitchMixCellSize === "number" &&
         Number.isFinite(parsed.glitchMixCellSize)
-          ? Math.min(5, Math.max(0.02, parsed.glitchMixCellSize))
+          ? Math.min(5, Math.max(0.001, parsed.glitchMixCellSize))
           : DEFAULT_GLOBAL_VIEW.glitchMixCellSize,
+      ...(() => {
+        const legacySpeed =
+          typeof parsed.glitchSpeed === "number" &&
+          Number.isFinite(parsed.glitchSpeed)
+            ? Math.min(3, Math.max(0, parsed.glitchSpeed))
+            : DEFAULT_GLOBAL_VIEW.glitchDigitalSpeed;
+        const readSpeed = (key: string): number => {
+          const v = parsed[key];
+          if (typeof v === "number" && Number.isFinite(v)) {
+            return Math.min(3, Math.max(0, v));
+          }
+          return legacySpeed;
+        };
+        return {
+          glitchDigitalSpeed: readSpeed("glitchDigitalSpeed"),
+          glitchDeformSpeed: readSpeed("glitchDeformSpeed"),
+          glitchScatterSpeed: readSpeed("glitchScatterSpeed"),
+          glitchTwistSpeed: readSpeed("glitchTwistSpeed"),
+          glitchTpSpeed: readSpeed("glitchTpSpeed"),
+          glitchChromaSpeed: readSpeed("glitchChromaSpeed"),
+          glitchMixWireSpeed: readSpeed("glitchMixWireSpeed"),
+          glitchMixPointsSpeed: readSpeed("glitchMixPointsSpeed"),
+          glitchMixSolidSpeed: readSpeed("glitchMixSolidSpeed"),
+        };
+      })(),
     };
   } catch {
     return { ...DEFAULT_GLOBAL_VIEW };
@@ -451,26 +471,34 @@ export function pickGlobalView(settings: ModelSettings): GlobalViewSettings {
     depthColors: settings.depthColors,
     invertDepthColors: settings.invertDepthColors,
     glitch: settings.glitch,
-    glitchSpeed: settings.glitchSpeed,
     glitchMixCellSize: settings.glitchMixCellSize,
     glitchDigitalMin: settings.glitchDigitalMin,
     glitchDigitalMax: settings.glitchDigitalMax,
+    glitchDigitalSpeed: settings.glitchDigitalSpeed,
     glitchDeformMin: settings.glitchDeformMin,
     glitchDeformMax: settings.glitchDeformMax,
+    glitchDeformSpeed: settings.glitchDeformSpeed,
     glitchScatterMin: settings.glitchScatterMin,
     glitchScatterMax: settings.glitchScatterMax,
+    glitchScatterSpeed: settings.glitchScatterSpeed,
     glitchTwistMin: settings.glitchTwistMin,
     glitchTwistMax: settings.glitchTwistMax,
+    glitchTwistSpeed: settings.glitchTwistSpeed,
     glitchTpMin: settings.glitchTpMin,
     glitchTpMax: settings.glitchTpMax,
+    glitchTpSpeed: settings.glitchTpSpeed,
     glitchChromaMin: settings.glitchChromaMin,
     glitchChromaMax: settings.glitchChromaMax,
+    glitchChromaSpeed: settings.glitchChromaSpeed,
     glitchMixWireMin: settings.glitchMixWireMin,
     glitchMixWireMax: settings.glitchMixWireMax,
+    glitchMixWireSpeed: settings.glitchMixWireSpeed,
     glitchMixPointsMin: settings.glitchMixPointsMin,
     glitchMixPointsMax: settings.glitchMixPointsMax,
+    glitchMixPointsSpeed: settings.glitchMixPointsSpeed,
     glitchMixSolidMin: settings.glitchMixSolidMin,
     glitchMixSolidMax: settings.glitchMixSolidMax,
+    glitchMixSolidSpeed: settings.glitchMixSolidSpeed,
     pointSize: settings.pointSize,
     pointDensity: settings.pointDensity,
     lineWidth: settings.lineWidth,

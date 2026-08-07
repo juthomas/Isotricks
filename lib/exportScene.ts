@@ -14,26 +14,34 @@ export type ExportCameraState = {
 
 export type ExportGlitchSettings = Pick<
   GlobalViewSettings,
-  | "glitchSpeed"
   | "glitchMixCellSize"
   | "glitchDigitalMin"
   | "glitchDigitalMax"
+  | "glitchDigitalSpeed"
   | "glitchDeformMin"
   | "glitchDeformMax"
+  | "glitchDeformSpeed"
   | "glitchScatterMin"
   | "glitchScatterMax"
+  | "glitchScatterSpeed"
   | "glitchTwistMin"
   | "glitchTwistMax"
+  | "glitchTwistSpeed"
   | "glitchTpMin"
   | "glitchTpMax"
+  | "glitchTpSpeed"
   | "glitchChromaMin"
   | "glitchChromaMax"
+  | "glitchChromaSpeed"
   | "glitchMixWireMin"
   | "glitchMixWireMax"
+  | "glitchMixWireSpeed"
   | "glitchMixPointsMin"
   | "glitchMixPointsMax"
+  | "glitchMixPointsSpeed"
   | "glitchMixSolidMin"
   | "glitchMixSolidMax"
+  | "glitchMixSolidSpeed"
 >;
 
 export type ExportModelSource = {

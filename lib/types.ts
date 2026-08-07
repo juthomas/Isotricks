@@ -20,28 +20,35 @@ export type GlobalViewSettings = {
   invertDepthColors: boolean;
   /** Master glitch toggle (any display mode) */
   glitch: boolean;
-  /** How fast effect amounts travel within their min–max range */
-  glitchSpeed: number;
   /** World-space size of mix cells (larger = bigger zones) */
   glitchMixCellSize: number;
   glitchDigitalMin: number;
   glitchDigitalMax: number;
+  glitchDigitalSpeed: number;
   glitchDeformMin: number;
   glitchDeformMax: number;
+  glitchDeformSpeed: number;
   glitchScatterMin: number;
   glitchScatterMax: number;
+  glitchScatterSpeed: number;
   glitchTwistMin: number;
   glitchTwistMax: number;
+  glitchTwistSpeed: number;
   glitchTpMin: number;
   glitchTpMax: number;
+  glitchTpSpeed: number;
   glitchChromaMin: number;
   glitchChromaMax: number;
+  glitchChromaSpeed: number;
   glitchMixWireMin: number;
   glitchMixWireMax: number;
+  glitchMixWireSpeed: number;
   glitchMixPointsMin: number;
   glitchMixPointsMax: number;
+  glitchMixPointsSpeed: number;
   glitchMixSolidMin: number;
   glitchMixSolidMax: number;
+  glitchMixSolidSpeed: number;
   pointSize: number;
   /** Percent of vertices to draw as points (0–100) */
   pointDensity: number;
@@ -85,11 +92,23 @@ export type GlitchRangeKey =
   | "glitchMixSolidMin"
   | "glitchMixSolidMax";
 
+export type GlitchSpeedKey =
+  | "glitchDigitalSpeed"
+  | "glitchDeformSpeed"
+  | "glitchScatterSpeed"
+  | "glitchTwistSpeed"
+  | "glitchTpSpeed"
+  | "glitchChromaSpeed"
+  | "glitchMixWireSpeed"
+  | "glitchMixPointsSpeed"
+  | "glitchMixSolidSpeed";
+
 export const GLITCH_EFFECTS: {
   id: GlitchEffectId;
   label: string;
   minKey: GlitchRangeKey;
   maxKey: GlitchRangeKey;
+  speedKey: GlitchSpeedKey;
   phase: number;
 }[] = [
   {
@@ -97,6 +116,7 @@ export const GLITCH_EFFECTS: {
     label: "Digital",
     minKey: "glitchDigitalMin",
     maxKey: "glitchDigitalMax",
+    speedKey: "glitchDigitalSpeed",
     phase: 0.4,
   },
   {
@@ -104,6 +124,7 @@ export const GLITCH_EFFECTS: {
     label: "Deform",
     minKey: "glitchDeformMin",
     maxKey: "glitchDeformMax",
+    speedKey: "glitchDeformSpeed",
     phase: 1.1,
   },
   {
@@ -111,6 +132,7 @@ export const GLITCH_EFFECTS: {
     label: "Scatter",
     minKey: "glitchScatterMin",
     maxKey: "glitchScatterMax",
+    speedKey: "glitchScatterSpeed",
     phase: 2.2,
   },
   {
@@ -118,6 +140,7 @@ export const GLITCH_EFFECTS: {
     label: "Twist",
     minKey: "glitchTwistMin",
     maxKey: "glitchTwistMax",
+    speedKey: "glitchTwistSpeed",
     phase: 3.0,
   },
   {
@@ -125,6 +148,7 @@ export const GLITCH_EFFECTS: {
     label: "TP",
     minKey: "glitchTpMin",
     maxKey: "glitchTpMax",
+    speedKey: "glitchTpSpeed",
     phase: 3.7,
   },
   {
@@ -132,6 +156,7 @@ export const GLITCH_EFFECTS: {
     label: "Chroma",
     minKey: "glitchChromaMin",
     maxKey: "glitchChromaMax",
+    speedKey: "glitchChromaSpeed",
     phase: 4.5,
   },
   {
@@ -139,6 +164,7 @@ export const GLITCH_EFFECTS: {
     label: "Mix wire",
     minKey: "glitchMixWireMin",
     maxKey: "glitchMixWireMax",
+    speedKey: "glitchMixWireSpeed",
     phase: 5.2,
   },
   {
@@ -146,6 +172,7 @@ export const GLITCH_EFFECTS: {
     label: "Mix points",
     minKey: "glitchMixPointsMin",
     maxKey: "glitchMixPointsMax",
+    speedKey: "glitchMixPointsSpeed",
     phase: 6.1,
   },
   {
@@ -153,6 +180,7 @@ export const GLITCH_EFFECTS: {
     label: "Mix solid",
     minKey: "glitchMixSolidMin",
     maxKey: "glitchMixSolidMax",
+    speedKey: "glitchMixSolidSpeed",
     phase: 7.0,
   },
 ];
@@ -162,26 +190,34 @@ export const GLOBAL_VIEW_KEYS = [
   "depthColors",
   "invertDepthColors",
   "glitch",
-  "glitchSpeed",
   "glitchMixCellSize",
   "glitchDigitalMin",
   "glitchDigitalMax",
+  "glitchDigitalSpeed",
   "glitchDeformMin",
   "glitchDeformMax",
+  "glitchDeformSpeed",
   "glitchScatterMin",
   "glitchScatterMax",
+  "glitchScatterSpeed",
   "glitchTwistMin",
   "glitchTwistMax",
+  "glitchTwistSpeed",
   "glitchTpMin",
   "glitchTpMax",
+  "glitchTpSpeed",
   "glitchChromaMin",
   "glitchChromaMax",
+  "glitchChromaSpeed",
   "glitchMixWireMin",
   "glitchMixWireMax",
+  "glitchMixWireSpeed",
   "glitchMixPointsMin",
   "glitchMixPointsMax",
+  "glitchMixPointsSpeed",
   "glitchMixSolidMin",
   "glitchMixSolidMax",
+  "glitchMixSolidSpeed",
   "pointSize",
   "pointDensity",
   "lineWidth",
@@ -275,26 +311,34 @@ export const DEFAULT_GLOBAL_VIEW: GlobalViewSettings = {
   depthColors: false,
   invertDepthColors: false,
   glitch: false,
-  glitchSpeed: 0.6,
   glitchMixCellSize: 0.15,
   glitchDigitalMin: 0.55,
   glitchDigitalMax: 0.55,
+  glitchDigitalSpeed: 0.6,
   glitchDeformMin: 0,
   glitchDeformMax: 0,
+  glitchDeformSpeed: 0.6,
   glitchScatterMin: 0,
   glitchScatterMax: 0,
+  glitchScatterSpeed: 0.6,
   glitchTwistMin: 0,
   glitchTwistMax: 0,
+  glitchTwistSpeed: 0.6,
   glitchTpMin: 0,
   glitchTpMax: 0,
+  glitchTpSpeed: 0.6,
   glitchChromaMin: 0,
   glitchChromaMax: 0,
+  glitchChromaSpeed: 0.6,
   glitchMixWireMin: 0,
   glitchMixWireMax: 0,
+  glitchMixWireSpeed: 0.6,
   glitchMixPointsMin: 0,
   glitchMixPointsMax: 0,
+  glitchMixPointsSpeed: 0.6,
   glitchMixSolidMin: 0,
   glitchMixSolidMax: 0,
+  glitchMixSolidSpeed: 0.6,
   pointSize: 2,
   pointDensity: 100,
   lineWidth: 1,
@@ -355,36 +399,25 @@ export function syncGlitchUniforms(
   gu: GlitchRuntimeUniforms,
   settings: Pick<
     GlobalViewSettings,
-    | "glitchSpeed"
     | "glitchMixCellSize"
-    | "glitchDigitalMin"
-    | "glitchDigitalMax"
-    | "glitchDeformMin"
-    | "glitchDeformMax"
-    | "glitchScatterMin"
-    | "glitchScatterMax"
-    | "glitchTwistMin"
-    | "glitchTwistMax"
-    | "glitchTpMin"
-    | "glitchTpMax"
-    | "glitchChromaMin"
-    | "glitchChromaMax"
-    | "glitchMixWireMin"
-    | "glitchMixWireMax"
-    | "glitchMixPointsMin"
-    | "glitchMixPointsMax"
-    | "glitchMixSolidMin"
-    | "glitchMixSolidMax"
+    | GlitchRangeKey
+    | GlitchSpeedKey
   >,
   time: number,
 ): void {
-  const speed = Math.min(3, Math.max(0, settings.glitchSpeed));
   gu.uGlitchTime.value = time;
-  gu.uMixFlicker.value = 1.5 + speed * 6;
-  const cellSize = Math.min(5, Math.max(0.02, settings.glitchMixCellSize));
+  const cellSize = Math.min(5, Math.max(0.001, settings.glitchMixCellSize));
   gu.uMixScale.value = 1 / cellSize;
 
+  const mixFlickerSpeed = Math.max(
+    settings.glitchMixWireSpeed,
+    settings.glitchMixPointsSpeed,
+    settings.glitchMixSolidSpeed,
+  );
+  gu.uMixFlicker.value = 1.5 + Math.min(3, Math.max(0, mixFlickerSpeed)) * 6;
+
   for (const fx of GLITCH_EFFECTS) {
+    const speed = Math.min(3, Math.max(0, settings[fx.speedKey]));
     const v = animateGlitchAmount(
       settings[fx.minKey],
       settings[fx.maxKey],
