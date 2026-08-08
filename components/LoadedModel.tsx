@@ -291,7 +291,8 @@ const GLITCH_MIX_DISCARD = /* glsl */ `
   else if (cell < nw + np + ns) chosen = 3.0;
 
   if (uMixLayer < 0.5) {
-    if (chosen > 0.5 && abs(chosen - uBaseMode) > 0.5) discard;
+    // Base yields any cell claimed by a mix overlay (incl. same display mode)
+    if (chosen > 0.5) discard;
   } else if (abs(chosen - uMixLayer) > 0.5) {
     discard;
   }
@@ -602,10 +603,8 @@ function createSolidOverlayMaterials(
   overlapBlending: OverlapBlending,
 ): THREE.Material | THREE.Material[] {
   if (colorMode === "texture") {
-    const clones = materialList(sourceMaterial).map((mat) =>
-      createTexturedSolidMaterial(mat),
-    );
-    return clones.length === 1 ? clones[0]! : clones;
+    // Match base solid+texture: keep lit Phong/Standard MTL materials
+    return cloneSolidBaseMaterials(sourceMaterial, "texture");
   }
   return new THREE.MeshBasicMaterial({
     color: SOLID_COLOR,
@@ -867,51 +866,47 @@ function applyDisplayMode(
       }
 
       if (glitch && activeGlitch) {
-        if (mode !== "wireframe") {
-          const wireMat = createWireMaterial(
-            originalMaterial,
-            colorModes.mixWire,
-            overlapBlending,
-          );
-          createdMaterials.push(wireMat);
-          patch(wireMat, MIX_LAYER_WIRE, colorModes.mixWire);
-          addMeshMatching(
-            child,
-            child.geometry,
-            wireMat,
-            colorModes.mixWire === "texture"
-              ? TEXTURE_RENDER_ORDER
-              : OVERLAP_RENDER_ORDER,
-          );
+        const wireMat = createWireMaterial(
+          originalMaterial,
+          colorModes.mixWire,
+          overlapBlending,
+        );
+        createdMaterials.push(wireMat);
+        patch(wireMat, MIX_LAYER_WIRE, colorModes.mixWire);
+        addMeshMatching(
+          child,
+          child.geometry,
+          wireMat,
+          colorModes.mixWire === "texture"
+            ? TEXTURE_RENDER_ORDER
+            : OVERLAP_RENDER_ORDER,
+        );
+
+        const solidMats = createSolidOverlayMaterials(
+          originalMaterial,
+          colorModes.mixSolid,
+          overlapBlending,
+        );
+        for (const mat of materialList(solidMats)) {
+          createdMaterials.push(mat);
+          patch(mat, MIX_LAYER_SOLID, colorModes.mixSolid);
         }
-        if (mode !== "solid") {
-          const solidMats = createSolidOverlayMaterials(
-            originalMaterial,
-            colorModes.mixSolid,
-            overlapBlending,
-          );
-          for (const mat of materialList(solidMats)) {
-            createdMaterials.push(mat);
-            patch(mat, MIX_LAYER_SOLID, colorModes.mixSolid);
-          }
-          addMeshMatching(
-            child,
-            child.geometry,
-            solidMats,
-            colorModes.mixSolid === "texture"
-              ? TEXTURE_RENDER_ORDER
-              : OVERLAP_RENDER_ORDER,
-          );
-        }
-        if (mode !== "points") {
-          makePointsFrom(
-            child,
-            child.geometry,
-            MIX_LAYER_POINTS,
-            colorModes.mixPoints,
-            originalMaterial,
-          );
-        }
+        addMeshMatching(
+          child,
+          child.geometry,
+          solidMats,
+          colorModes.mixSolid === "texture"
+            ? TEXTURE_RENDER_ORDER
+            : OVERLAP_RENDER_ORDER,
+        );
+
+        makePointsFrom(
+          child,
+          child.geometry,
+          MIX_LAYER_POINTS,
+          colorModes.mixPoints,
+          originalMaterial,
+        );
       }
     } else if (
       child instanceof THREE.LineSegments ||
@@ -957,7 +952,7 @@ function applyDisplayMode(
         patch(child.material, MIX_LAYER_BASE, colorModes.base);
       }
 
-      if (glitch && activeGlitch && mode !== "points") {
+      if (glitch && activeGlitch) {
         makePointsFrom(
           child,
           child.geometry,

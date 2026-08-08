@@ -119,6 +119,7 @@ export default function HomeClient() {
   const videoExport = useVideoExport({
     settings,
     getExportSource: () => exportSourceRef.current?.() ?? null,
+    modelLabel: source.label,
   });
 
   useEffect(() => {

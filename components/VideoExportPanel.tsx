@@ -34,6 +34,7 @@ export default function VideoExportPanel({
     audioOffsetSec,
     audioDurationSec,
     audioLabel,
+    exportName,
     previewFrame,
     recording,
     progress,
@@ -45,6 +46,7 @@ export default function VideoExportPanel({
     setSyncMode,
     setAudioOffsetSec,
     setAudioFile,
+    setExportName,
     setPreviewFrame,
     startExport,
     exportPhoto,
@@ -354,6 +356,23 @@ export default function VideoExportPanel({
       {status && !error && !recording && (
         <p className="text-xs text-zinc-500">{status}</p>
       )}
+
+      <label className="block space-y-1">
+        <span className="text-xs text-zinc-400">Export name</span>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="text"
+            value={exportName}
+            disabled={recording}
+            onChange={(e) => setExportName(e.target.value)}
+            spellCheck={false}
+            className="min-w-0 flex-1 rounded-md bg-zinc-900 px-2 py-1.5 font-mono text-xs text-zinc-200 ring-1 ring-zinc-700 outline-none focus:ring-indigo-500 disabled:opacity-50"
+          />
+          <span className="shrink-0 font-mono text-[10px] text-zinc-500">
+            .mp4 / .png
+          </span>
+        </div>
+      </label>
 
       <div className="flex gap-2">
         <button

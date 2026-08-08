@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   clampExportSize,
   computeExportTiming,
@@ -9,6 +9,7 @@ import {
   DEFAULT_EXPORT_WIDTH,
   downloadMp4,
   downloadPng,
+  exportBasenameFromModelLabel,
   exportOfflineMp4,
   exportOfflinePng,
   sliceAudioBuffer,
@@ -26,6 +27,7 @@ export type VideoExportControls = {
   audioFile: File | null;
   audioDurationSec: number | null;
   audioLabel: string | null;
+  exportName: string;
   previewFrame: boolean;
   recording: boolean;
   progress: number;
@@ -37,6 +39,7 @@ export type VideoExportControls = {
   setSyncMode: (m: SyncMode) => void;
   setAudioOffsetSec: (n: number) => void;
   setAudioFile: (file: File | null) => Promise<void>;
+  setExportName: (name: string) => void;
   setPreviewFrame: (on: boolean) => void;
   startExport: () => Promise<void>;
   exportPhoto: () => Promise<void>;
@@ -46,6 +49,7 @@ export type VideoExportControls = {
 type UseVideoExportArgs = {
   settings: ModelSettings;
   getExportSource: () => ExportModelSource | null;
+  modelLabel: string;
 };
 
 function waitForPaint(): Promise<void> {
@@ -59,6 +63,7 @@ function waitForPaint(): Promise<void> {
 export function useVideoExport({
   settings,
   getExportSource,
+  modelLabel,
 }: UseVideoExportArgs): VideoExportControls {
   const [revolutions, setRevolutions] = useState(1);
   const [width, setWidthState] = useState(DEFAULT_EXPORT_WIDTH);
@@ -68,12 +73,19 @@ export function useVideoExport({
   const [audioFile, setAudioFileState] = useState<File | null>(null);
   const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
   const [audioDurationSec, setAudioDurationSec] = useState<number | null>(null);
+  const [exportName, setExportName] = useState(() =>
+    exportBasenameFromModelLabel(modelLabel),
+  );
   const [previewFrame, setPreviewFrame] = useState(false);
   const [recording, setRecording] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    setExportName(exportBasenameFromModelLabel(modelLabel));
+  }, [modelLabel]);
 
   const setWidth = useCallback((n: number) => {
     setWidthState(clampExportSize(n));
@@ -180,7 +192,7 @@ export function useVideoExport({
         signal: abort.signal,
         onProgress: setProgress,
       });
-      downloadMp4(blob, revolutions);
+      downloadMp4(blob, exportName);
       setStatus("Saved MP4");
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
@@ -204,6 +216,7 @@ export function useVideoExport({
     audioBuffer,
     width,
     height,
+    exportName,
   ]);
 
   const exportPhoto = useCallback(async () => {
@@ -234,7 +247,7 @@ export function useVideoExport({
         width,
         height,
       });
-      downloadPng(blob, width, height);
+      downloadPng(blob, exportName);
       setStatus("Saved PNG");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Photo export failed");
@@ -242,7 +255,7 @@ export function useVideoExport({
       setRecording(false);
       setProgress(0);
     }
-  }, [recording, getExportSource, width, height]);
+  }, [recording, getExportSource, width, height, exportName]);
 
   return {
     revolutions,
@@ -253,6 +266,7 @@ export function useVideoExport({
     audioFile,
     audioDurationSec,
     audioLabel: audioFile?.name ?? null,
+    exportName,
     previewFrame,
     recording,
     progress,
@@ -264,6 +278,7 @@ export function useVideoExport({
     setSyncMode,
     setAudioOffsetSec,
     setAudioFile,
+    setExportName,
     setPreviewFrame,
     startExport,
     exportPhoto,

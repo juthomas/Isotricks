@@ -113,6 +113,23 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+const DEFAULT_EXPORT_BASENAME = "iso-tricks";
+
+/** Strip extension and sanitize for a download basename. */
+export function exportBasenameFromModelLabel(label: string): string {
+  const trimmed = label.trim();
+  const withoutExt = trimmed.replace(/\.[^.\/\\]+$/u, "");
+  const base = (withoutExt || trimmed)
+    .replace(/[^\w.-]+/gu, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "");
+  return base || DEFAULT_EXPORT_BASENAME;
+}
+
+export function resolveExportBasename(name: string): string {
+  return exportBasenameFromModelLabel(name) || DEFAULT_EXPORT_BASENAME;
+}
+
 function yieldToMain(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -449,12 +466,14 @@ export async function exportOfflineMp4(
   }
 }
 
-export function downloadMp4(blob: Blob, revolutions: number): void {
-  downloadBlob(blob, `iso-tricks-${revolutions}rev.mp4`);
+export function downloadMp4(blob: Blob, basename: string): void {
+  const name = resolveExportBasename(basename);
+  downloadBlob(blob, `${name}.mp4`);
 }
 
-export function downloadPng(blob: Blob, width: number, height: number): void {
-  downloadBlob(blob, `iso-tricks-${width}x${height}.png`);
+export function downloadPng(blob: Blob, basename: string): void {
+  const name = resolveExportBasename(basename);
+  downloadBlob(blob, `${name}.png`);
 }
 
 /**
