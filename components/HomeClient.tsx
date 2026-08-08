@@ -96,6 +96,7 @@ export default function HomeClient() {
   const [immersive, setImmersive] = useState(false);
   const [cursorHidden, setCursorHidden] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [rotationResetKey, setRotationResetKey] = useState(0);
   const cursorHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const objectKey = useMemo(() => {
@@ -390,6 +391,7 @@ export default function HomeClient() {
           advanceSceneTime={sceneClock.advance}
           getSceneTime={sceneClock.getSceneTime}
           onExportReady={onExportReady}
+          rotationResetKey={rotationResetKey}
           loading={loadState.status === "loading"}
           error={immersive ? null : loadState.error}
         />
@@ -456,6 +458,7 @@ export default function HomeClient() {
           }}
           onSettingsChange={(update) => setSettings(update)}
           onResetSettings={resetSettings}
+          onResetRotation={() => setRotationResetKey((k) => k + 1)}
         />
       )}
     </div>
