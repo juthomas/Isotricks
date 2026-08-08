@@ -256,7 +256,6 @@ function formatCellSize(size: number): string {
   return size.toFixed(2);
 }
 
-/** Effect range + compact inline speed on one block. */
 function ColorModeControl({
   value,
   hasTextures,
@@ -308,6 +307,7 @@ function ColorModeControl({
   );
 }
 
+/** Effect intensity range + full-width speed (oscillation min↔max). */
 function GlitchEffectControls({
   label,
   minValue,
@@ -315,6 +315,8 @@ function GlitchEffectControls({
   onRangeChange,
   speed,
   onSpeedChange,
+  rate,
+  onRateChange,
   colorMode,
   hasTextures,
   onColorModeChange,
@@ -326,6 +328,8 @@ function GlitchEffectControls({
   onRangeChange: (min: number, max: number) => void;
   speed: number;
   onSpeedChange: (speed: number) => void;
+  rate: number;
+  onRateChange: (rate: number) => void;
   colorMode?: ColorMode;
   hasTextures?: boolean;
   onColorModeChange?: (mode: ColorMode) => void;
@@ -352,29 +356,13 @@ function GlitchEffectControls({
     "[&::-moz-range-track]:bg-transparent";
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2 text-xs">
-        <span className="w-[4.5rem] shrink-0 truncate text-zinc-400">{label}</span>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className="truncate text-zinc-400">{label}</span>
         <span className="shrink-0 font-mono text-[10px] tabular-nums text-zinc-500">
           {formatGlitchIntensity(Math.min(minValue, maxValue))}–
           {formatGlitchIntensity(Math.max(minValue, maxValue))}
         </span>
-        <div className="ml-auto flex min-w-0 max-w-[9.5rem] flex-1 items-center gap-1">
-          <span className="shrink-0 text-[10px] text-zinc-600">spd</span>
-          <input
-            type="range"
-            min={0}
-            max={3}
-            step={0.01}
-            value={speed}
-            aria-label={`${label} speed`}
-            onChange={(e) => onSpeedChange(Number(e.target.value))}
-            className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-zinc-700 accent-indigo-500"
-          />
-          <span className="w-7 shrink-0 text-right font-mono text-[10px] tabular-nums text-zinc-500">
-            {speed.toFixed(1)}×
-          </span>
-        </div>
       </div>
       {colorMode !== undefined && onColorModeChange && hasTextures !== undefined && (
         <ColorModeControl
@@ -424,6 +412,34 @@ function GlitchEffectControls({
           className={thumbClass}
           style={{ zIndex: 3 }}
         />
+      </div>
+      <div className="space-y-1">
+        <SliderRow
+          label="Speed"
+          value={speed}
+          min={0}
+          max={3}
+          step={0.01}
+          display={`${speed.toFixed(2)}×`}
+          onChange={onSpeedChange}
+        />
+        <p className="text-[10px] text-zinc-600">
+          Oscillation between min and max
+        </p>
+      </div>
+      <div className="space-y-1">
+        <SliderRow
+          label="Rate"
+          value={rate}
+          min={0}
+          max={3}
+          step={0.01}
+          display={`${rate.toFixed(2)}×`}
+          onChange={onRateChange}
+        />
+        <p className="text-[10px] text-zinc-600">
+          Temporal speed of the effect
+        </p>
       </div>
       {extra}
     </div>
@@ -699,6 +715,10 @@ export default function ControlPanel({
                     speed={settings[fx.speedKey]}
                     onSpeedChange={(speed) =>
                       onSettingsChange({ [fx.speedKey]: speed })
+                    }
+                    rate={settings[fx.rateKey]}
+                    onRateChange={(rate) =>
+                      onSettingsChange({ [fx.rateKey]: rate })
                     }
                     colorMode={
                       fx.colorKey ? settings[fx.colorKey] : undefined

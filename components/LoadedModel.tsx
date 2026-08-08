@@ -160,6 +160,12 @@ uniform float uGlitchScatter;
 uniform float uGlitchTwist;
 uniform float uGlitchTp;
 uniform float uGlitchChroma;
+uniform float uGlitchDigitalRate;
+uniform float uGlitchDeformRate;
+uniform float uGlitchScatterRate;
+uniform float uGlitchTwistRate;
+uniform float uGlitchTpRate;
+uniform float uGlitchChromaRate;
 uniform float uMixWire;
 uniform float uMixPoints;
 uniform float uMixSolid;
@@ -179,6 +185,12 @@ uniform float uGlitchScatter;
 uniform float uGlitchTwist;
 uniform float uGlitchTp;
 uniform float uGlitchChroma;
+uniform float uGlitchDigitalRate;
+uniform float uGlitchDeformRate;
+uniform float uGlitchScatterRate;
+uniform float uGlitchTwistRate;
+uniform float uGlitchTpRate;
+uniform float uGlitchChromaRate;
 uniform float uMixWire;
 uniform float uMixPoints;
 uniform float uMixSolid;
@@ -194,23 +206,25 @@ const GLITCH_AFTER_BEGIN = /* glsl */ `
 {
   float gDeform = clamp(uGlitchDeform, 0.0, 1.0);
   if (gDeform > 0.0001) {
+    float tDeform = uGlitchTime * uGlitchDeformRate;
     vec3 gp = transformed;
-    float n1 = isoGlitchHash(gp.x * 2.7 + gp.y * 5.1 + uGlitchTime * 0.4);
-    float n2 = isoGlitchHash(gp.z * 3.9 + gp.y * 1.8 + uGlitchTime * 0.55);
-    float n3 = isoGlitchHash(gp.x * 4.2 + gp.z * 2.3 + uGlitchTime * 0.35);
-    float pulse = 0.65 + 0.35 * sin(uGlitchTime * 3.2 + gp.y * 4.0);
-    float spike = step(0.91, isoGlitchHash(floor(uGlitchTime * 4.0) + floor(gp.y * 6.0)));
+    float n1 = isoGlitchHash(gp.x * 2.7 + gp.y * 5.1 + tDeform * 0.4);
+    float n2 = isoGlitchHash(gp.z * 3.9 + gp.y * 1.8 + tDeform * 0.55);
+    float n3 = isoGlitchHash(gp.x * 4.2 + gp.z * 2.3 + tDeform * 0.35);
+    float pulse = 0.65 + 0.35 * sin(tDeform * 3.2 + gp.y * 4.0);
+    float spike = step(0.91, isoGlitchHash(floor(tDeform * 4.0) + floor(gp.y * 6.0)));
     transformed += vec3(
-      sin(gp.y * 7.0 + uGlitchTime * 5.0) * n1,
-      cos(gp.x * 6.0 + uGlitchTime * 4.0) * n2,
-      sin(gp.x * 5.0 + gp.z * 4.0 + uGlitchTime * 6.0) * n3
+      sin(gp.y * 7.0 + tDeform * 5.0) * n1,
+      cos(gp.x * 6.0 + tDeform * 4.0) * n2,
+      sin(gp.x * 5.0 + gp.z * 4.0 + tDeform * 6.0) * n3
     ) * gDeform * (0.28 * pulse + spike * 0.55);
   }
 
   float gScatter = clamp(uGlitchScatter, 0.0, 1.0);
   if (gScatter > 0.0001) {
+    float tScatter = uGlitchTime * uGlitchScatterRate;
     float id = isoGlitchHash(dot(transformed, vec3(12.9898, 78.233, 37.719)));
-    float tick = floor(uGlitchTime * 3.5);
+    float tick = floor(tScatter * 3.5);
     float burst = step(0.62, isoGlitchHash(id * 40.0 + tick));
     float burst2 = step(0.88, isoGlitchHash(tick * 9.1 + floor(transformed.y * 3.0)));
     vec3 dir = vec3(
@@ -219,23 +233,25 @@ const GLITCH_AFTER_BEGIN = /* glsl */ `
       isoGlitchHash(id + 3.7) - 0.5
     );
     transformed += dir * gScatter * (burst * 0.7 + burst2 * 1.2);
-    transformed += dir * sin(uGlitchTime * 12.0 + id * 20.0) * gScatter * 0.08;
+    transformed += dir * sin(tScatter * 12.0 + id * 20.0) * gScatter * 0.08;
   }
 
   float gTwist = clamp(uGlitchTwist, 0.0, 1.0);
   float gTp = clamp(uGlitchTp, 0.0, 1.0);
   if (gTwist > 0.0001 || gTp > 0.0001) {
+    float tTwist = uGlitchTime * uGlitchTwistRate;
+    float tTp = uGlitchTime * uGlitchTpRate;
     float ang = 0.0;
     if (gTwist > 0.0001) {
-      ang += transformed.y * (1.8 + sin(uGlitchTime * 1.7) * 1.2) * gTwist;
+      ang += transformed.y * (1.8 + sin(tTwist * 1.7) * 1.2) * gTwist;
     }
     if (gTp > 0.0001) {
-      float tick = floor(uGlitchTime * 5.0);
+      float tick = floor(tTp * 5.0);
       float snap = step(0.8, isoGlitchHash(tick + 3.0));
       ang += snap * (isoGlitchHash(tick) - 0.5) * 6.28318 * gTp;
     }
     float shear = gTwist > 0.0001
-      ? sin(uGlitchTime * 2.4 + transformed.y * 3.0) * gTwist * 0.35
+      ? sin(tTwist * 2.4 + transformed.y * 3.0) * gTwist * 0.35
       : 0.0;
     float s = sin(ang);
     float c = cos(ang);
@@ -244,7 +260,7 @@ const GLITCH_AFTER_BEGIN = /* glsl */ `
     transformed.x = x;
     transformed.z = z;
     if (gTwist > 0.0001) {
-      transformed.y += sin(transformed.x * 4.0 + uGlitchTime * 3.0) * gTwist * 0.12;
+      transformed.y += sin(transformed.x * 4.0 + tTwist * 3.0) * gTwist * 0.12;
     }
   }
 
@@ -256,13 +272,14 @@ const GLITCH_AFTER_PROJECT = /* glsl */ `
 {
   float gDigital = clamp(uGlitchDigital, 0.0, 1.0);
   if (gDigital > 0.0001) {
-    float gSlice = floor(gl_Position.y * 18.0 + uGlitchTime * 3.0);
-    float gBurst = step(0.82, isoGlitchHash(gSlice + floor(uGlitchTime * 7.0)));
-    gl_Position.x += (isoGlitchHash(gSlice * 12.9898 + uGlitchTime) - 0.5) * gBurst * gDigital * 0.65 * gl_Position.w;
-    float gJ = isoGlitchHash(dot(gl_Position.xy, vec2(12.9898, 78.233)) + uGlitchTime * 19.0);
+    float tDigital = uGlitchTime * uGlitchDigitalRate;
+    float gSlice = floor(gl_Position.y * 18.0 + tDigital * 3.0);
+    float gBurst = step(0.82, isoGlitchHash(gSlice + floor(tDigital * 7.0)));
+    gl_Position.x += (isoGlitchHash(gSlice * 12.9898 + tDigital) - 0.5) * gBurst * gDigital * 0.65 * gl_Position.w;
+    float gJ = isoGlitchHash(dot(gl_Position.xy, vec2(12.9898, 78.233)) + tDigital * 19.0);
     gl_Position.xy += (vec2(gJ, isoGlitchHash(gJ * 91.7)) - 0.5) * gDigital * 0.04 * gl_Position.w;
-    float gTear = step(0.94, isoGlitchHash(floor(uGlitchTime * 5.0) + floor(gl_Position.y * 4.0)));
-    gl_Position.x += (isoGlitchHash(uGlitchTime * 2.1 + gSlice) - 0.5) * gTear * gDigital * 1.1 * gl_Position.w;
+    float gTear = step(0.94, isoGlitchHash(floor(tDigital * 5.0) + floor(gl_Position.y * 4.0)));
+    gl_Position.x += (isoGlitchHash(tDigital * 2.1 + gSlice) - 0.5) * gTear * gDigital * 1.1 * gl_Position.w;
   }
 }
 `;
@@ -304,33 +321,37 @@ ${GLITCH_MIX_DISCARD}
 {
   float gDigital = clamp(uGlitchDigital, 0.0, 1.0);
   if (gDigital > 0.0001) {
-    float gTick = floor(uGlitchTime * 11.0);
+    float tDigital = uGlitchTime * uGlitchDigitalRate;
+    float gTick = floor(tDigital * 11.0);
     float gFlash = step(0.9, isoGlitchHash(gTick * 45.123));
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.gbr, gFlash * gDigital);
     float gBand = step(0.86, isoGlitchHash(floor(gl_FragCoord.y * 0.08) + gTick));
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.brg, gBand * gDigital * 0.85);
-    diffuseColor.r += (isoGlitchHash(uGlitchTime * 3.17) - 0.5) * gDigital * 0.45;
-    diffuseColor.b += (isoGlitchHash(uGlitchTime * 5.91) - 0.5) * gDigital * 0.45;
+    diffuseColor.r += (isoGlitchHash(tDigital * 3.17) - 0.5) * gDigital * 0.45;
+    diffuseColor.b += (isoGlitchHash(tDigital * 5.91) - 0.5) * gDigital * 0.45;
     float gKill = step(0.985, isoGlitchHash(gTick + 17.0));
     diffuseColor.rgb *= 1.0 - gKill * gDigital * 0.85;
   }
 
   float gDeform = clamp(uGlitchDeform, 0.0, 1.0);
   if (gDeform > 0.0001) {
-    float wobble = sin(uGlitchTime * 8.0 + gl_FragCoord.y * 0.05) * 0.5 + 0.5;
+    float tDeform = uGlitchTime * uGlitchDeformRate;
+    float wobble = sin(tDeform * 8.0 + gl_FragCoord.y * 0.05) * 0.5 + 0.5;
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.bgr, wobble * gDeform * 0.35);
   }
 
   float gScatter = clamp(uGlitchScatter, 0.0, 1.0);
   if (gScatter > 0.0001) {
-    float flicker = step(0.92, isoGlitchHash(floor(uGlitchTime * 14.0)));
+    float tScatter = uGlitchTime * uGlitchScatterRate;
+    float flicker = step(0.92, isoGlitchHash(floor(tScatter * 14.0)));
     diffuseColor.rgb *= 1.0 - flicker * gScatter * 0.5;
     diffuseColor.r += flicker * gScatter * 0.3;
   }
 
   float gTwist = clamp(uGlitchTwist, 0.0, 1.0);
   if (gTwist > 0.0001) {
-    float swirl = (sin(uGlitchTime * 6.0) * 0.5 + 0.5) * gTwist * 0.4;
+    float tTwist = uGlitchTime * uGlitchTwistRate;
+    float swirl = (sin(tTwist * 6.0) * 0.5 + 0.5) * gTwist * 0.4;
     diffuseColor.rgb = mix(
       diffuseColor.rgb,
       vec3(diffuseColor.b, diffuseColor.r, diffuseColor.g),
@@ -340,16 +361,18 @@ ${GLITCH_MIX_DISCARD}
 
   float gTp = clamp(uGlitchTp, 0.0, 1.0);
   if (gTp > 0.0001) {
-    float tick = floor(uGlitchTime * 5.0);
+    float tTp = uGlitchTime * uGlitchTpRate;
+    float tick = floor(tTp * 5.0);
     float flash = step(0.85, isoGlitchHash(tick + 11.0));
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.brg, flash * gTp * 0.7);
   }
 
   float gChroma = clamp(uGlitchChroma, 0.0, 1.0);
   if (gChroma > 0.0001) {
-    float gTick = floor(uGlitchTime * 13.0);
+    float tChroma = uGlitchTime * uGlitchChromaRate;
+    float gTick = floor(tChroma * 13.0);
     float gFlash = step(0.88, isoGlitchHash(gTick * 17.3));
-    float yBand = floor(gl_FragCoord.y * 0.12 + uGlitchTime * 2.0);
+    float yBand = floor(gl_FragCoord.y * 0.12 + tChroma * 2.0);
     float shift = (isoGlitchHash(yBand) - 0.5) * gChroma;
     diffuseColor.r += shift * 0.9 + gFlash * gChroma * 0.4;
     diffuseColor.g += -shift * 0.5;
@@ -377,6 +400,12 @@ function createGlitchUniforms(): GlitchUniforms {
     uGlitchTwist: { value: 0 },
     uGlitchTp: { value: 0 },
     uGlitchChroma: { value: 0 },
+    uGlitchDigitalRate: { value: 1 },
+    uGlitchDeformRate: { value: 1 },
+    uGlitchScatterRate: { value: 1 },
+    uGlitchTwistRate: { value: 1 },
+    uGlitchTpRate: { value: 1 },
+    uGlitchChromaRate: { value: 1 },
     uMixWire: { value: 0 },
     uMixPoints: { value: 0 },
     uMixSolid: { value: 0 },

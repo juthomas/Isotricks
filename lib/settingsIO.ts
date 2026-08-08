@@ -121,14 +121,17 @@ function pickKnownSettings(raw: Record<string, unknown>): ModelSettings {
 
   for (const key of GLOBAL_VIEW_KEYS) {
     if (
-      (key.endsWith("Min") || key.endsWith("Max") || key.endsWith("Speed")) &&
+      (key.endsWith("Min") ||
+        key.endsWith("Max") ||
+        key.endsWith("Speed") ||
+        key.endsWith("Rate")) &&
       key.startsWith("glitch") &&
       typeof next[key] === "number"
     ) {
       (next as GlobalViewSettings)[key] = clamp(
         next[key] as number,
         0,
-        key.endsWith("Speed") ? 5 : 1,
+        key.endsWith("Speed") || key.endsWith("Rate") ? 5 : 1,
       ) as never;
     }
   }

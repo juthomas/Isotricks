@@ -342,6 +342,13 @@ function loadGlobalView(): GlobalViewSettings {
           }
           return legacySpeed;
         };
+        const readRate = (key: string, fallback: number): number => {
+          const v = parsed[key];
+          if (typeof v === "number" && Number.isFinite(v)) {
+            return Math.min(3, Math.max(0, v));
+          }
+          return fallback;
+        };
         return {
           glitchDigitalSpeed: readSpeed("glitchDigitalSpeed"),
           glitchDeformSpeed: readSpeed("glitchDeformSpeed"),
@@ -352,6 +359,42 @@ function loadGlobalView(): GlobalViewSettings {
           glitchMixWireSpeed: readSpeed("glitchMixWireSpeed"),
           glitchMixPointsSpeed: readSpeed("glitchMixPointsSpeed"),
           glitchMixSolidSpeed: readSpeed("glitchMixSolidSpeed"),
+          glitchDigitalRate: readRate(
+            "glitchDigitalRate",
+            DEFAULT_GLOBAL_VIEW.glitchDigitalRate,
+          ),
+          glitchDeformRate: readRate(
+            "glitchDeformRate",
+            DEFAULT_GLOBAL_VIEW.glitchDeformRate,
+          ),
+          glitchScatterRate: readRate(
+            "glitchScatterRate",
+            DEFAULT_GLOBAL_VIEW.glitchScatterRate,
+          ),
+          glitchTwistRate: readRate(
+            "glitchTwistRate",
+            DEFAULT_GLOBAL_VIEW.glitchTwistRate,
+          ),
+          glitchTpRate: readRate(
+            "glitchTpRate",
+            DEFAULT_GLOBAL_VIEW.glitchTpRate,
+          ),
+          glitchChromaRate: readRate(
+            "glitchChromaRate",
+            DEFAULT_GLOBAL_VIEW.glitchChromaRate,
+          ),
+          glitchMixWireRate: readRate(
+            "glitchMixWireRate",
+            DEFAULT_GLOBAL_VIEW.glitchMixWireRate,
+          ),
+          glitchMixPointsRate: readRate(
+            "glitchMixPointsRate",
+            DEFAULT_GLOBAL_VIEW.glitchMixPointsRate,
+          ),
+          glitchMixSolidRate: readRate(
+            "glitchMixSolidRate",
+            DEFAULT_GLOBAL_VIEW.glitchMixSolidRate,
+          ),
         };
       })(),
     };
@@ -563,34 +606,43 @@ export function pickGlobalView(settings: ModelSettings): GlobalViewSettings {
     glitchDigitalMin: settings.glitchDigitalMin,
     glitchDigitalMax: settings.glitchDigitalMax,
     glitchDigitalSpeed: settings.glitchDigitalSpeed,
+    glitchDigitalRate: settings.glitchDigitalRate,
     glitchDeformMin: settings.glitchDeformMin,
     glitchDeformMax: settings.glitchDeformMax,
     glitchDeformSpeed: settings.glitchDeformSpeed,
+    glitchDeformRate: settings.glitchDeformRate,
     glitchScatterMin: settings.glitchScatterMin,
     glitchScatterMax: settings.glitchScatterMax,
     glitchScatterSpeed: settings.glitchScatterSpeed,
+    glitchScatterRate: settings.glitchScatterRate,
     glitchTwistMin: settings.glitchTwistMin,
     glitchTwistMax: settings.glitchTwistMax,
     glitchTwistSpeed: settings.glitchTwistSpeed,
+    glitchTwistRate: settings.glitchTwistRate,
     glitchTpMin: settings.glitchTpMin,
     glitchTpMax: settings.glitchTpMax,
     glitchTpSpeed: settings.glitchTpSpeed,
+    glitchTpRate: settings.glitchTpRate,
     glitchChromaMin: settings.glitchChromaMin,
     glitchChromaMax: settings.glitchChromaMax,
     glitchChromaSpeed: settings.glitchChromaSpeed,
+    glitchChromaRate: settings.glitchChromaRate,
     glitchMixWireMin: settings.glitchMixWireMin,
     glitchMixWireMax: settings.glitchMixWireMax,
     glitchMixWireSpeed: settings.glitchMixWireSpeed,
+    glitchMixWireRate: settings.glitchMixWireRate,
     glitchMixWireColor: settings.glitchMixWireColor,
     glitchMixPointsMin: settings.glitchMixPointsMin,
     glitchMixPointsMax: settings.glitchMixPointsMax,
     glitchMixPointsSpeed: settings.glitchMixPointsSpeed,
+    glitchMixPointsRate: settings.glitchMixPointsRate,
     glitchMixPointsColor: settings.glitchMixPointsColor,
     glitchMixPointsSize: settings.glitchMixPointsSize,
     glitchMixPointsDensity: settings.glitchMixPointsDensity,
     glitchMixSolidMin: settings.glitchMixSolidMin,
     glitchMixSolidMax: settings.glitchMixSolidMax,
     glitchMixSolidSpeed: settings.glitchMixSolidSpeed,
+    glitchMixSolidRate: settings.glitchMixSolidRate,
     glitchMixSolidColor: settings.glitchMixSolidColor,
     glitchMixSolidBrightness: settings.glitchMixSolidBrightness,
     glitchMixSolidContrast: settings.glitchMixSolidContrast,
