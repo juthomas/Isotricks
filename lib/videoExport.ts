@@ -7,6 +7,7 @@ import {
   type ExportModelSource,
 } from "@/lib/exportScene";
 import { syncPointSizesForResolution } from "@/lib/pointSize";
+import { applyAxisSpin, normalizeRotationAxis } from "@/lib/rotationAxis";
 import { syncGlitchUniforms } from "@/lib/types";
 
 export const EXPORT_FPS = 30;
@@ -368,7 +369,9 @@ export async function exportOfflineMp4(
 
   const direction =
     source.rotationDirection === 0 ? 1 : source.rotationDirection;
-  const startY = root.rotation.y;
+  const spinAxis = normalizeRotationAxis(source.rotationAxis);
+  const baseQuat = root.quaternion.clone();
+  const spinScratch = new THREE.Quaternion();
   const totalFrames = Math.max(1, Math.round(durationSec * EXPORT_FPS));
   const frameDurationUs = Math.round(1_000_000 / EXPORT_FPS);
 
@@ -379,7 +382,13 @@ export async function exportOfflineMp4(
       }
 
       const t = totalFrames <= 1 ? 0 : i / totalFrames;
-      root.rotation.y = startY + direction * Math.PI * 2 * revolutions * t;
+      applyAxisSpin(
+        root.quaternion,
+        baseQuat,
+        spinAxis,
+        direction * Math.PI * 2 * revolutions * t,
+        spinScratch,
+      );
 
       if (source.depthUniforms) {
         updateExportDepthUniforms(

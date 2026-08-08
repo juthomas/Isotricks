@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { GlitchRuntimeUniforms, GlobalViewSettings } from "@/lib/types";
+import type { RotationAxisWeights } from "@/lib/rotationAxis";
 
 export type ExportCameraState = {
   position: THREE.Vector3;
@@ -60,6 +61,7 @@ export type ExportModelSource = {
   rotationDirection: 1 | -1 | 0;
   displayMode: "wireframe" | "points" | "solid";
   colorMode: GlobalViewSettings["colorMode"];
+  rotationAxis: RotationAxisWeights;
   /** Scene clock time used for glitch (photo export). */
   sceneTime: number;
 };

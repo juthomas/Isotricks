@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import {
@@ -11,6 +11,11 @@ import {
   type GlitchRuntimeUniforms,
   type ModelSettings,
 } from "@/lib/types";
+import {
+  applyAxisSpin,
+  normalizeRotationAxis,
+  rebaseAxisSpin,
+} from "@/lib/rotationAxis";
 import {
   clampPointSizeSetting,
   resolvePointPixelSize,
@@ -66,6 +71,8 @@ type LoadedModelProps = {
   advanceSceneTime?: (delta: number, timeScale: number) => number;
   getSceneTime?: () => number;
   onExportRoot?: (root: THREE.Object3D | null) => void;
+  /** Increment to snap orientation back to identity (and re-base spin). */
+  rotationResetKey?: number;
 };
 
 type DepthUniforms = {
@@ -1010,6 +1017,94 @@ function applyDisplayMode(
   };
 }
 
+/** Red spin-axis gizmo (sibling of export root — never included in offline export). */
+function RotationAxisPreview({
+  axisX,
+  axisY,
+  axisZ,
+  targetRef,
+}: {
+  axisX: number;
+  axisY: number;
+  axisZ: number;
+  targetRef: RefObject<THREE.Object3D | null>;
+}) {
+  const helperRef = useRef<THREE.Group>(null);
+  const boxRef = useRef(new THREE.Box3());
+  const sizeRef = useRef(new THREE.Vector3());
+  const axisRef = useRef(new THREE.Vector3());
+
+  const line = useMemo(() => {
+    const positions = new Float32Array(6);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(positions, 3),
+    );
+    const material = new THREE.LineBasicMaterial({
+      color: 0xff2222,
+      toneMapped: false,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const obj = new THREE.Line(geometry, material);
+    obj.renderOrder = 10_000;
+    obj.frustumCulled = false;
+    return obj;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      line.geometry.dispose();
+      (line.material as THREE.Material).dispose();
+    };
+  }, [line]);
+
+  useFrame(() => {
+    const target = targetRef.current;
+    const helper = helperRef.current;
+    if (!target || !helper) return;
+
+    target.updateWorldMatrix(true, true);
+    // Pivot = object origin (quaternion spin center), not bbox center
+    helper.position.setFromMatrixPosition(target.matrixWorld);
+
+    const box = boxRef.current.setFromObject(target);
+    if (!box.isEmpty()) {
+      box.getSize(sizeRef.current);
+    } else {
+      sizeRef.current.set(1, 1, 1);
+    }
+    const len =
+      Math.max(sizeRef.current.x, sizeRef.current.y, sizeRef.current.z, 0.5) *
+      0.85;
+
+    normalizeRotationAxis(
+      { rotationAxisX: axisX, rotationAxisY: axisY, rotationAxisZ: axisZ },
+      axisRef.current,
+    );
+
+    const attr = line.geometry.getAttribute(
+      "position",
+    ) as THREE.BufferAttribute;
+    const arr = attr.array as Float32Array;
+    const a = axisRef.current;
+    arr[0] = -a.x * len;
+    arr[1] = -a.y * len;
+    arr[2] = -a.z * len;
+    arr[3] = a.x * len;
+    arr[4] = a.y * len;
+    arr[5] = a.z * len;
+    attr.needsUpdate = true;
+  });
+
+  return (
+    <group ref={helperRef}>
+      <primitive object={line} />
+    </group>
+  );
+}
+
 export default function LoadedModel({
   object,
   settings,
@@ -1017,6 +1112,7 @@ export default function LoadedModel({
   advanceSceneTime,
   getSceneTime,
   onExportRoot,
+  rotationResetKey = 0,
 }: LoadedModelProps) {
   const groupRef = useRef<THREE.Group>(null);
   const { camera, size, gl } = useThree();
@@ -1034,36 +1130,130 @@ export default function LoadedModel({
   const boxRef = useRef(new THREE.Box3());
   const cornerRef = useRef(new THREE.Vector3());
   const viewMatrixRef = useRef(new THREE.Matrix4());
-  const baseYawRef = useRef(0);
+  const baseQuatRef = useRef(new THREE.Quaternion());
+  const axisVecRef = useRef(new THREE.Vector3());
+  const spinScratchRef = useRef(new THREE.Quaternion());
   const autoRotatePrevRef = useRef(settings.autoRotate);
+  const rotationResetPrevRef = useRef(rotationResetKey);
+  const spinParamsRef = useRef({
+    axisX: settings.rotationAxisX,
+    axisY: settings.rotationAxisY,
+    axisZ: settings.rotationAxisZ,
+    speed: settings.rotationSpeed,
+    dir: settings.rotationDirection,
+  });
 
   const cloned = useMemo(() => object.clone(true), [object]);
 
-  // Reset yaw baseline when the model instance changes
+  // Reset spin baseline when the model instance changes
   useEffect(() => {
-    baseYawRef.current = 0;
+    baseQuatRef.current.identity();
     autoRotatePrevRef.current = settings.autoRotate;
+    rotationResetPrevRef.current = rotationResetKey;
+    spinParamsRef.current = {
+      axisX: settings.rotationAxisX,
+      axisY: settings.rotationAxisY,
+      axisZ: settings.rotationAxisZ,
+      speed: settings.rotationSpeed,
+      dir: settings.rotationDirection,
+    };
   }, [cloned]);
 
-  // When enabling auto-rotate, lock baseline so pose doesn't jump
+  // Snap orientation to identity when the panel Reset button fires
+  useEffect(() => {
+    if (rotationResetKey === rotationResetPrevRef.current) return;
+    rotationResetPrevRef.current = rotationResetKey;
+    const root = groupRef.current;
+    if (!root) return;
+
+    root.quaternion.identity();
+    root.rotation.set(0, 0, 0);
+
+    const t = getSceneTime?.() ?? 0;
+    const dir = settings.rotationDirection;
+    if (settings.autoRotate && dir !== 0) {
+      const axis = normalizeRotationAxis(
+        {
+          rotationAxisX: settings.rotationAxisX,
+          rotationAxisY: settings.rotationAxisY,
+          rotationAxisZ: settings.rotationAxisZ,
+        },
+        axisVecRef.current,
+      );
+      rebaseAxisSpin(
+        root.quaternion,
+        axis,
+        dir * settings.rotationSpeed * t,
+        baseQuatRef.current,
+        spinScratchRef.current,
+      );
+    } else {
+      baseQuatRef.current.identity();
+    }
+  }, [
+    rotationResetKey,
+    settings.autoRotate,
+    settings.rotationDirection,
+    settings.rotationSpeed,
+    settings.rotationAxisX,
+    settings.rotationAxisY,
+    settings.rotationAxisZ,
+    getSceneTime,
+  ]);
+
+  // When enabling auto-rotate or changing spin params, rebase so pose doesn't jump
   useEffect(() => {
     const root = groupRef.current;
     if (!root) return;
-    if (settings.autoRotate && !autoRotatePrevRef.current) {
+
+    const prev = spinParamsRef.current;
+    const paramsChanged =
+      prev.axisX !== settings.rotationAxisX ||
+      prev.axisY !== settings.rotationAxisY ||
+      prev.axisZ !== settings.rotationAxisZ ||
+      prev.speed !== settings.rotationSpeed ||
+      prev.dir !== settings.rotationDirection;
+    const enabled = settings.autoRotate && !autoRotatePrevRef.current;
+
+    if (settings.autoRotate && (enabled || paramsChanged)) {
       const t = getSceneTime?.() ?? 0;
       const dir = settings.rotationDirection;
+      const axis = normalizeRotationAxis(
+        {
+          rotationAxisX: settings.rotationAxisX,
+          rotationAxisY: settings.rotationAxisY,
+          rotationAxisZ: settings.rotationAxisZ,
+        },
+        axisVecRef.current,
+      );
       if (dir !== 0) {
-        baseYawRef.current =
-          root.rotation.y - dir * settings.rotationSpeed * t;
+        rebaseAxisSpin(
+          root.quaternion,
+          axis,
+          dir * settings.rotationSpeed * t,
+          baseQuatRef.current,
+          spinScratchRef.current,
+        );
       } else {
-        baseYawRef.current = root.rotation.y;
+        baseQuatRef.current.copy(root.quaternion);
       }
     }
+
     autoRotatePrevRef.current = settings.autoRotate;
+    spinParamsRef.current = {
+      axisX: settings.rotationAxisX,
+      axisY: settings.rotationAxisY,
+      axisZ: settings.rotationAxisZ,
+      speed: settings.rotationSpeed,
+      dir: settings.rotationDirection,
+    };
   }, [
     settings.autoRotate,
     settings.rotationDirection,
     settings.rotationSpeed,
+    settings.rotationAxisX,
+    settings.rotationAxisY,
+    settings.rotationAxisZ,
     getSceneTime,
   ]);
 
@@ -1157,9 +1347,21 @@ export default function LoadedModel({
       : (getSceneTime?.() ?? 0);
 
     if (settings.autoRotate && settings.rotationDirection !== 0) {
-      groupRef.current.rotation.y =
-        baseYawRef.current +
-        settings.rotationDirection * settings.rotationSpeed * t;
+      const axis = normalizeRotationAxis(
+        {
+          rotationAxisX: settings.rotationAxisX,
+          rotationAxisY: settings.rotationAxisY,
+          rotationAxisZ: settings.rotationAxisZ,
+        },
+        axisVecRef.current,
+      );
+      applyAxisSpin(
+        groupRef.current.quaternion,
+        baseQuatRef.current,
+        axis,
+        settings.rotationDirection * settings.rotationSpeed * t,
+        spinScratchRef.current,
+      );
     }
 
     if (settings.glitch) {
@@ -1205,8 +1407,18 @@ export default function LoadedModel({
   });
 
   return (
-    <group ref={groupRef}>
-      <primitive object={cloned} />
-    </group>
+    <>
+      <group ref={groupRef}>
+        <primitive object={cloned} />
+      </group>
+      {settings.showRotationAxis && !recording && (
+        <RotationAxisPreview
+          axisX={settings.rotationAxisX}
+          axisY={settings.rotationAxisY}
+          axisZ={settings.rotationAxisZ}
+          targetRef={groupRef}
+        />
+      )}
+    </>
   );
 }

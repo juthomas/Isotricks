@@ -88,6 +88,12 @@ export type GlobalViewSettings = {
 export type ObjectSettings = {
   rotationSpeed: number;
   rotationDirection: RotationDirection;
+  /** Mix weights for the spin axis (normalized at runtime; fallback Y) */
+  rotationAxisX: number;
+  rotationAxisY: number;
+  rotationAxisZ: number;
+  /** Draw the spin axis in red in the live viewer (not exported) */
+  showRotationAxis: boolean;
   angleX: number;
   angleY: number;
   zoom: number;
@@ -293,6 +299,10 @@ export const GLOBAL_VIEW_KEYS = [
 export const OBJECT_SETTING_KEYS = [
   "rotationSpeed",
   "rotationDirection",
+  "rotationAxisX",
+  "rotationAxisY",
+  "rotationAxisZ",
+  "showRotationAxis",
   "angleX",
   "angleY",
   "zoom",
@@ -424,6 +434,10 @@ export const DEFAULT_GLOBAL_VIEW: GlobalViewSettings = {
 export const DEFAULT_OBJECT_SETTINGS: ObjectSettings = {
   rotationSpeed: 0.4,
   rotationDirection: 1,
+  rotationAxisX: 0,
+  rotationAxisY: 1,
+  rotationAxisZ: 0,
+  showRotationAxis: false,
   angleX: 35.264,
   angleY: 45,
   zoom: 1,

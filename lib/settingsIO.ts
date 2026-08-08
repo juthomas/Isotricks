@@ -29,6 +29,25 @@ function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
+function migrateLegacyRotationAxis(raw: Record<string, unknown>): {
+  rotationAxisX: number;
+  rotationAxisY: number;
+  rotationAxisZ: number;
+} | null {
+  if (
+    "rotationAxisX" in raw ||
+    "rotationAxisY" in raw ||
+    "rotationAxisZ" in raw
+  ) {
+    return null;
+  }
+  const legacy = raw.rotationAxis;
+  if (legacy === "x") return { rotationAxisX: 1, rotationAxisY: 0, rotationAxisZ: 0 };
+  if (legacy === "y") return { rotationAxisX: 0, rotationAxisY: 1, rotationAxisZ: 0 };
+  if (legacy === "z") return { rotationAxisX: 0, rotationAxisY: 0, rotationAxisZ: 1 };
+  return null;
+}
+
 function pickKnownSettings(raw: Record<string, unknown>): ModelSettings {
   const next: ModelSettings = { ...DEFAULT_SETTINGS };
 
@@ -46,6 +65,14 @@ function pickKnownSettings(raw: Record<string, unknown>): ModelSettings {
   // Legacy depthColors → colorMode
   if (!("colorMode" in raw) && raw.depthColors === true) {
     next.colorMode = "depth";
+  }
+
+  // Legacy rotationAxis enum → mix weights
+  const migratedAxis = migrateLegacyRotationAxis(raw);
+  if (migratedAxis) {
+    next.rotationAxisX = migratedAxis.rotationAxisX;
+    next.rotationAxisY = migratedAxis.rotationAxisY;
+    next.rotationAxisZ = migratedAxis.rotationAxisZ;
   }
 
   if (!DISPLAY_MODES.has(next.displayMode)) {
@@ -66,6 +93,9 @@ function pickKnownSettings(raw: Record<string, unknown>): ModelSettings {
   if (!ROTATION_DIRS.has(next.rotationDirection)) {
     next.rotationDirection = DEFAULT_SETTINGS.rotationDirection;
   }
+  if (typeof next.showRotationAxis !== "boolean") {
+    next.showRotationAxis = DEFAULT_SETTINGS.showRotationAxis;
+  }
 
   next.glitchMixCellSize = clamp(next.glitchMixCellSize, 0.001, 20);
   next.textureBrightness = clamp(next.textureBrightness, 0.05, 2);
@@ -84,6 +114,9 @@ function pickKnownSettings(raw: Record<string, unknown>): ModelSettings {
   next.autoCycleSeconds = clamp(next.autoCycleSeconds, 1, 120);
   next.timeScale = clamp(next.timeScale, 0.00001, 4);
   next.rotationSpeed = clamp(next.rotationSpeed, 0, 5);
+  next.rotationAxisX = clamp(next.rotationAxisX, -1, 1);
+  next.rotationAxisY = clamp(next.rotationAxisY, -1, 1);
+  next.rotationAxisZ = clamp(next.rotationAxisZ, -1, 1);
   next.zoom = clamp(next.zoom, 0.1, 10);
 
   for (const key of GLOBAL_VIEW_KEYS) {

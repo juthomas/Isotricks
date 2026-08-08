@@ -28,6 +28,8 @@ type IsoViewerProps = {
   advanceSceneTime?: (delta: number, timeScale: number) => number;
   getSceneTime?: () => number;
   onExportReady?: (getSource: (() => ExportModelSource | null) | null) => void;
+  /** Increment to snap model orientation back to identity. */
+  rotationResetKey?: number;
 };
 
 const FADE_MS = 180;
@@ -263,6 +265,11 @@ function ExportBridge({
         rotationDirection: s.rotationDirection,
         displayMode: s.displayMode,
         colorMode: s.colorMode,
+        rotationAxis: {
+          rotationAxisX: s.rotationAxisX,
+          rotationAxisY: s.rotationAxisY,
+          rotationAxisZ: s.rotationAxisZ,
+        },
         sceneTime: getSceneTime?.() ?? 0,
       };
     });
@@ -287,6 +294,7 @@ export default function IsoViewer({
   advanceSceneTime,
   getSceneTime,
   onExportReady,
+  rotationResetKey = 0,
 }: IsoViewerProps) {
   const [showLoading, setShowLoading] = useState(false);
   const [displayObject, setDisplayObject] = useState<THREE.Object3D | null>(
@@ -449,6 +457,7 @@ export default function IsoViewer({
                 advanceSceneTime={advanceSceneTime}
                 getSceneTime={getSceneTime}
                 onExportRoot={onModelRoot}
+                rotationResetKey={rotationResetKey}
               />
             )}
             {settings.orbitEnabled && (

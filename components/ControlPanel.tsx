@@ -41,6 +41,7 @@ type ControlPanelProps = {
   onDeleteSavedModel: (id: string) => void;
   onSettingsChange: (update: Partial<ModelSettings>) => void;
   onResetSettings: () => void;
+  onResetRotation: () => void;
 };
 
 function GearIcon({ className }: { className?: string }) {
@@ -458,6 +459,7 @@ export default function ControlPanel({
   onDeleteSavedModel,
   onSettingsChange,
   onResetSettings,
+  onResetRotation,
 }: ControlPanelProps) {
   const activeDemoId = source.kind === "demo" ? source.id : null;
   const activeSavedId = source.kind === "file" ? source.id : null;
@@ -867,6 +869,41 @@ export default function ControlPanel({
               ))}
             </div>
             <SliderRow
+              label="Axis X"
+              value={settings.rotationAxisX}
+              min={-1}
+              max={1}
+              step={0.01}
+              onChange={(rotationAxisX) => onSettingsChange({ rotationAxisX })}
+            />
+            <SliderRow
+              label="Axis Y"
+              value={settings.rotationAxisY}
+              min={-1}
+              max={1}
+              step={0.01}
+              onChange={(rotationAxisY) => onSettingsChange({ rotationAxisY })}
+            />
+            <SliderRow
+              label="Axis Z"
+              value={settings.rotationAxisZ}
+              min={-1}
+              max={1}
+              step={0.01}
+              onChange={(rotationAxisZ) => onSettingsChange({ rotationAxisZ })}
+            />
+            <label className="flex items-center justify-between text-xs text-zinc-400">
+              <span>Show rotation axis</span>
+              <input
+                type="checkbox"
+                checked={settings.showRotationAxis}
+                onChange={(e) =>
+                  onSettingsChange({ showRotationAxis: e.target.checked })
+                }
+                className="size-4 accent-indigo-500"
+              />
+            </label>
+            <SliderRow
               label="Speed (rad/s)"
               value={settings.rotationSpeed}
               min={0}
@@ -874,6 +911,13 @@ export default function ControlPanel({
               step={0.01}
               onChange={(rotationSpeed) => onSettingsChange({ rotationSpeed })}
             />
+            <button
+              type="button"
+              onClick={onResetRotation}
+              className="w-full rounded-lg bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-200 ring-1 ring-zinc-700 transition-colors hover:bg-zinc-700"
+            >
+              Reset rotation
+            </button>
           </div>
 
           <div className="space-y-3">

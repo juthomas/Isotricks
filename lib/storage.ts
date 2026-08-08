@@ -403,13 +403,72 @@ function loadObjectSettings(objectKey: string): ObjectSettings {
     void _p;
     void _pd;
     void _l;
+    const migrated = migrateStoredRotationAxis(
+      objectOnly as Record<string, unknown>,
+    );
+    const partial = objectOnly as Partial<ObjectSettings>;
     return {
       ...DEFAULT_OBJECT_SETTINGS,
-      ...(objectOnly as Partial<ObjectSettings>),
+      ...partial,
+      ...migrated,
+      ...sanitizeObjectMotion({ ...partial, ...migrated }),
     };
   } catch {
     return { ...DEFAULT_OBJECT_SETTINGS };
   }
+}
+
+function migrateStoredRotationAxis(
+  raw: Record<string, unknown>,
+): Partial<ObjectSettings> {
+  if (
+    typeof raw.rotationAxisX === "number" ||
+    typeof raw.rotationAxisY === "number" ||
+    typeof raw.rotationAxisZ === "number"
+  ) {
+    return {};
+  }
+  const legacy = raw.rotationAxis;
+  if (legacy === "x") return { rotationAxisX: 1, rotationAxisY: 0, rotationAxisZ: 0 };
+  if (legacy === "y") return { rotationAxisX: 0, rotationAxisY: 1, rotationAxisZ: 0 };
+  if (legacy === "z") return { rotationAxisX: 0, rotationAxisY: 0, rotationAxisZ: 1 };
+  return {};
+}
+
+function clampAxisWeight(n: unknown, fallback: number): number {
+  if (typeof n !== "number" || !Number.isFinite(n)) return fallback;
+  return Math.min(1, Math.max(-1, n));
+}
+
+function sanitizeObjectMotion(
+  partial: Partial<ObjectSettings>,
+): Partial<ObjectSettings> {
+  const out: Partial<ObjectSettings> = {};
+  if (partial.rotationAxisX !== undefined) {
+    out.rotationAxisX = clampAxisWeight(
+      partial.rotationAxisX,
+      DEFAULT_OBJECT_SETTINGS.rotationAxisX,
+    );
+  }
+  if (partial.rotationAxisY !== undefined) {
+    out.rotationAxisY = clampAxisWeight(
+      partial.rotationAxisY,
+      DEFAULT_OBJECT_SETTINGS.rotationAxisY,
+    );
+  }
+  if (partial.rotationAxisZ !== undefined) {
+    out.rotationAxisZ = clampAxisWeight(
+      partial.rotationAxisZ,
+      DEFAULT_OBJECT_SETTINGS.rotationAxisZ,
+    );
+  }
+  if (
+    partial.showRotationAxis !== undefined &&
+    typeof partial.showRotationAxis !== "boolean"
+  ) {
+    out.showRotationAxis = DEFAULT_OBJECT_SETTINGS.showRotationAxis;
+  }
+  return out;
 }
 
 /** Combined snapshot for useSyncExternalStore */
@@ -548,6 +607,10 @@ export function pickObjectSettings(settings: ModelSettings): ObjectSettings {
   return {
     rotationSpeed: settings.rotationSpeed,
     rotationDirection: settings.rotationDirection,
+    rotationAxisX: settings.rotationAxisX,
+    rotationAxisY: settings.rotationAxisY,
+    rotationAxisZ: settings.rotationAxisZ,
+    showRotationAxis: settings.showRotationAxis,
     angleX: settings.angleX,
     angleY: settings.angleY,
     zoom: settings.zoom,
