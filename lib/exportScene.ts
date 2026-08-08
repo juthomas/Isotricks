@@ -59,6 +59,7 @@ export type ExportModelSource = {
   camera: ExportCameraState;
   rotationDirection: 1 | -1 | 0;
   displayMode: "wireframe" | "points" | "solid";
+  colorMode: GlobalViewSettings["colorMode"];
   /** Scene clock time used for glitch (photo export). */
   sceneTime: number;
 };
@@ -196,12 +197,25 @@ export function buildExportScene(
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
 
-  const ambientIntensity = source.displayMode === "solid" ? 0.85 : 1;
-  scene.add(new THREE.AmbientLight(0xffffff, ambientIntensity));
-  if (source.displayMode === "solid") {
-    const dir = new THREE.DirectionalLight(0xffffff, 0.45);
-    dir.position.set(4, 6, 2);
-    scene.add(dir);
+  // Keep in sync with IsoViewer lights (esp. solid + texture Phong MTL)
+  const texturedSolid =
+    source.displayMode === "solid" && source.colorMode === "texture";
+  if (texturedSolid) {
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const key = new THREE.DirectionalLight(0xffffff, 1.1);
+    key.position.set(5, 8, 4);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.35);
+    fill.position.set(-4, 2, -3);
+    scene.add(fill);
+  } else {
+    const ambientIntensity = source.displayMode === "solid" ? 0.85 : 1;
+    scene.add(new THREE.AmbientLight(0xffffff, ambientIntensity));
+    if (source.displayMode === "solid") {
+      const dir = new THREE.DirectionalLight(0xffffff, 0.45);
+      dir.position.set(4, 6, 2);
+      scene.add(dir);
+    }
   }
 
   const root = cloneHierarchyShareMaterials(source.modelRoot);

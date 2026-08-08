@@ -298,7 +298,7 @@ export type OfflineExportOptions = {
 /**
  * Offline frame-by-frame render at fixed resolution → MP4 (H.264 + optional AAC).
  * Uses a dedicated offscreen WebGLRenderer so the live canvas keeps running
- * independently, with the same sRGB color management as the on-screen view.
+ * independently, matching R3F sRGB + ACESFilmic tone mapping.
  */
 export async function exportOfflineMp4(
   options: OfflineExportOptions,
@@ -357,9 +357,10 @@ export async function exportOfflineMp4(
     preserveDrawingBuffer: true,
     powerPreference: "high-performance",
   });
-  // Match R3F live view color management (setter also sets drawingBufferColorSpace)
+  // Match R3F Canvas defaults (sRGB out + ACES — not NoToneMapping)
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1;
   renderer.setPixelRatio(1);
   renderer.setSize(width, height, false);
   renderer.setClearColor(0x000000, 1);
@@ -477,7 +478,8 @@ export async function exportOfflinePng(options: {
     powerPreference: "high-performance",
   });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1;
   renderer.setPixelRatio(1);
   renderer.setSize(width, height, false);
   renderer.setClearColor(0x000000, 1);

@@ -262,6 +262,7 @@ function ExportBridge({
         camera: captureOrthoCameraState(camera),
         rotationDirection: s.rotationDirection,
         displayMode: s.displayMode,
+        colorMode: s.colorMode,
         sceneTime: getSceneTime?.() ?? 0,
       };
     });
